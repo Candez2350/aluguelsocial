@@ -7,7 +7,10 @@
   <link rel="stylesheet" href="/css/tailwind.css">
 </head>
 
-<body class="relative flex items-center justify-center min-h-screen w-screen overflow-x-hidden overflow-y-auto py-10 bg-gradient-to-br from-surface-50 via-surface-100 to-gov-50 bg-fixed font-sans selection:bg-gov-500 selection:text-white">
+<body class="relative flex items-center justify-center min-h-screen w-screen overflow-x-hidden overflow-y-auto py-10 font-sans selection:bg-gov-500 selection:text-white bg-transparent">
+
+  <!-- Camada de Fundo Gradiente Fixa (Evita barra branca no scroll) -->
+  <div class="fixed inset-0 bg-gradient-to-br from-surface-50 via-surface-100 to-gov-50 z-0"></div>
 
   <!-- Floating Ambient Glowing Blobs -->
   <div class="absolute rounded-full blur-[130px] opacity-15 mix-blend-multiply pointer-events-none w-[500px] h-[500px] -top-[100px] -left-[100px] bg-[radial-gradient(circle,rgba(59,130,246,0.8)_0%,rgba(59,130,246,0)_70%)] animate-float-slow"></div>
