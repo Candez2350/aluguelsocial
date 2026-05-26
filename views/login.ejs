@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Sistema Auxílio Aluguel</title>
+  <link rel="stylesheet" href="/css/tailwind.css">
+</head>
+
+<body class="relative flex items-center justify-center min-h-screen w-screen overflow-x-hidden overflow-y-auto py-10 bg-gradient-to-br from-surface-50 via-surface-100 to-gov-50 font-sans selection:bg-gov-500 selection:text-white">
+
+  <!-- Floating Ambient Glowing Blobs -->
+  <div class="absolute rounded-full blur-[130px] opacity-15 mix-blend-multiply pointer-events-none w-[500px] h-[500px] -top-[100px] -left-[100px] bg-[radial-gradient(circle,rgba(59,130,246,0.8)_0%,rgba(59,130,246,0)_70%)] animate-float-slow"></div>
+  <div class="absolute rounded-full blur-[130px] opacity-15 mix-blend-multiply pointer-events-none w-[600px] h-[600px] -bottom-[150px] -right-[150px] bg-[radial-gradient(circle,rgba(249,115,22,0.6)_0%,rgba(249,115,22,0)_70%)] animate-float-slow-reverse"></div>
+  <div class="absolute rounded-full blur-[130px] opacity-15 mix-blend-multiply pointer-events-none w-[450px] h-[450px] top-[30%] left-[55%] bg-[radial-gradient(circle,rgba(168,85,247,0.4)_0%,rgba(168,85,247,0)_70%)] animate-pulse-slow"></div>
+
+  <div class="z-10 w-full max-w-[460px] glass-panel rounded-3xl overflow-hidden glass-panel-hover transition-all duration-300">
+    <div class="px-12 pt-14 pb-7 text-center border-b border-gov-900/5 bg-gradient-to-b from-gov-900/[0.02] to-transparent">
+      <div class="inline-flex items-center gap-3 mb-5">
+        <div class="w-11 h-11 rounded-xl flex items-center justify-center font-display font-extrabold text-2xl text-white bg-gradient-to-br from-gov-900 to-gov-500 shadow-[0_4px_15px_rgba(59,130,246,0.25),inset_0_1px_1px_rgba(255,255,255,0.35)] drop-shadow-sm">S</div>
+        <div class="font-display text-[1.65rem] font-extrabold bg-gradient-to-br from-gov-900 from-40% to-gov-500 bg-clip-text text-transparent tracking-tight">Aluguel Social</div>
+      </div>
+
+      <div class="mb-5">
+        <span class="inline-block bg-amber-500/10 text-amber-600 border border-amber-500/20 text-[0.65rem] font-extrabold tracking-[1.8px] px-3.5 py-1.5 rounded-full uppercase font-display shadow-sm">Governo do Estado do Rio de Janeiro</span>
+      </div>
+
+      <div class="flex flex-col gap-1.5">
+        <h2 class="text-slate-800 font-bold text-[0.85rem] leading-snug m-0 tracking-wide">Secretaria de Estado da Mulher e de Políticas Inclusivas</h2>
+        <h3 class="text-slate-500 font-medium text-[0.78rem] leading-snug m-0">Secretaria de Estado de Desenvolvimento Social e Direitos Humanos</h3>
+      </div>
+    </div>
+
+    <!-- Mensagens de Alerta -->
+    <% if (error) { %>
+      <div class="flex items-center gap-2 mx-11 mt-6 px-4 py-3 bg-red-50 border border-red-200 text-red-500 font-medium text-sm rounded-xl">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <span><strong>Erro:</strong> <%= error %></span>
+      </div>
+    <% } %>
+
+    <% if (success) { %>
+      <div class="flex items-center gap-2 mx-11 mt-6 px-4 py-3 bg-emerald-50 border border-emerald-200 text-emerald-500 font-medium text-sm rounded-xl">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+          <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </svg>
+        <span><%= success %></span>
+      </div>
+    <% } %>
+
+    <form class="px-11 pt-9 pb-7" action="/login" method="POST">
+      <div class="mb-6">
+        <label for="email" class="block text-slate-700 font-semibold text-xs mb-2 tracking-wide uppercase">E-mail Institucional</label>
+        <input type="email" id="email" name="email" class="w-full bg-surface-50/80 border-[1.5px] border-gov-900/10 text-slate-900 px-4 py-3.5 rounded-xl text-[0.925rem] placeholder-slate-400 transition-all duration-300 focus:outline-none focus:border-gov-500 focus:bg-white focus:ring-4 focus:ring-gov-500/15" placeholder="ex: operador@aluguel.gov.br" required>
+      </div>
+
+      <div class="mb-8">
+        <label for="password" class="block text-slate-700 font-semibold text-xs mb-2 tracking-wide uppercase">Senha</label>
+        <input type="password" id="password" name="password" class="w-full bg-surface-50/80 border-[1.5px] border-gov-900/10 text-slate-900 px-4 py-3.5 rounded-xl text-[0.925rem] placeholder-slate-400 transition-all duration-300 focus:outline-none focus:border-gov-500 focus:bg-white focus:ring-4 focus:ring-gov-500/15" placeholder="Digite sua senha de acesso" required>
+      </div>
+
+      <button type="submit" class="w-full btn-primary font-display font-bold text-[0.95rem] tracking-wide py-3.5">Acessar Sistema</button>
+    </form>
+
+    <!-- Atalhos de Perfil (Fins de Teste e Demonstração) -->
+    <div class="px-11 pt-7 pb-9 bg-gov-900/5 border-t border-gov-900/5">
+      <p class="text-[0.72rem] font-bold uppercase text-slate-500 tracking-[1.2px] m-0 mb-4 text-center">Atalhos Rápidos de Perfis (Fins de Testes)</p>
+      <div class="grid grid-cols-2 gap-3">
+        <button class="flex items-center justify-center gap-1.5 bg-white/60 border border-gov-900/10 text-slate-700 px-3 py-2.5 rounded-lg text-[0.76rem] font-semibold transition-all duration-200 hover:bg-white hover:border-gov-900/25 hover:text-gov-900 hover:-translate-y-[1.5px] hover:shadow-[0_4px_12px_rgba(30,58,138,0.08)] active:translate-y-0" onclick="fillShortcut('admin@aluguelsocial.gov.br')">
+          👑 ADMIN
+        </button>
+        <button class="flex items-center justify-center gap-1.5 bg-white/60 border border-gov-900/10 text-slate-700 px-3 py-2.5 rounded-lg text-[0.76rem] font-semibold transition-all duration-200 hover:bg-white hover:border-gov-900/25 hover:text-gov-900 hover:-translate-y-[1.5px] hover:shadow-[0_4px_12px_rgba(30,58,138,0.08)] active:translate-y-0" onclick="fillShortcut('operador@aluguelsocial.gov.br')">
+          📝 OPERADOR
+        </button>
+        <button class="flex items-center justify-center gap-1.5 bg-white/60 border border-gov-900/10 text-slate-700 px-3 py-2.5 rounded-lg text-[0.76rem] font-semibold transition-all duration-200 hover:bg-white hover:border-gov-900/25 hover:text-gov-900 hover:-translate-y-[1.5px] hover:shadow-[0_4px_12px_rgba(30,58,138,0.08)] active:translate-y-0" onclick="fillShortcut('analista@aluguelsocial.gov.br')">
+          ⚖️ ANALISTA
+        </button>
+        <button class="flex items-center justify-center gap-1.5 bg-white/60 border border-gov-900/10 text-slate-700 px-3 py-2.5 rounded-lg text-[0.76rem] font-semibold transition-all duration-200 hover:bg-white hover:border-gov-900/25 hover:text-gov-900 hover:-translate-y-[1.5px] hover:shadow-[0_4px_12px_rgba(30,58,138,0.08)] active:translate-y-0" onclick="fillShortcut('assistente@aluguelsocial.gov.br')">
+          🏡 ASSISTENTE
+        </button>
+        <button class="col-span-2 flex items-center justify-center gap-1.5 bg-white/60 border border-gov-900/10 text-slate-700 px-3 py-2.5 rounded-lg text-[0.76rem] font-semibold transition-all duration-200 hover:bg-white hover:border-gov-900/25 hover:text-gov-900 hover:-translate-y-[1.5px] hover:shadow-[0_4px_12px_rgba(30,58,138,0.08)] active:translate-y-0" onclick="fillShortcut('gestor@aluguelsocial.gov.br', true)">
+          📊 GESTOR
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function fillShortcut(email, isFullSpan = false) {
+      document.getElementById('email').value = email;
+      document.getElementById('password').value = '123456';
+
+      // Auto-submit para agilizar testes do usuário
+      setTimeout(() => {
+        document.querySelector('form').submit();
+      }, 300);
+    }
+  </script>
+
+</body>
+</html>

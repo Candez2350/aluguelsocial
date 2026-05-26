@@ -1,0 +1,1587 @@
+<%- include('../partials/header') %>
+
+<div id="gestor-alert-container"></div>
+
+<!-- Pré-cálculos Estatísticos & Métricas para Alta Liderança -->
+<%
+  const agora = new Date();
+  
+  // 1. Processos ativos nas esteiras (Triagem, Análise e Recurso)
+  const ativos = processos.filter(p => ['TRIAGEM', 'ANALISE', 'RECURSO'].includes(p.statusAtual));
+  
+  // 2. Processos aprovados aguardando homologação do gestor
+  const aprovados = processos.filter(p => p.statusAtual === 'APROVADO');
+  
+  // 3. Processos aptos para pagamento (Folha Ativa)
+  const aptos = processos.filter(p => p.statusAtual === 'APTO_PAGAMENTO');
+  
+  // 4. Processos da esteira Simplificada (Judicial / MPU) ativos
+  const prioridadeJudicial = processos.filter(p => p.tipoEsteira === 'SIMPLIFICADO' && ['ANALISE', 'RECURSO'].includes(p.statusAtual)).length;
+  
+  // 5. Processos atrasados (SLA de análise estourado)
+  const atrasados = ativos.filter(p => new Date(p.dataLimiteAnalise) < agora);
+  
+  // 6. Taxa de conformidade de SLA (%)
+  const taxaSla = ativos.length > 0 ? (((ativos.length - atrasados.length) / ativos.length) * 100).toFixed(1) : "100.0";
+  
+  // 7. Impacto Orçamentário
+  const custoMensal = aptos.length * valorBase;
+  const custoAnualProjetado = custoMensal * 12;
+%>
+
+<!-- ================= SEÇÃO 1: PAINEL DE KPIs EXECUTIVOS ================= -->
+<div class="metrics-grid">
+  <!-- Card 1: Impacto Financeiro (Azul Royal) -->
+  <div class="metric-card primary">
+    <div class="metric-title">Folha Mensal Ativa</div>
+    <div class="metric-value" style="font-size: 1.8rem; color: var(--primary);">
+      R$ <%= custoMensal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %>
+    </div>
+    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 6px; font-weight: 500;">
+      Projeção Anual: R$ <%= custoAnualProjetado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %>
+    </div>
+  </div>
+
+  <!-- Card 2: Homologações Pendentes (Laranja Lacre) -->
+  <div class="metric-card secondary">
+    <div class="metric-title">Pendente Homologação</div>
+    <div class="metric-value" style="font-size: 1.8rem; color: var(--secondary);">
+      <%= aprovados.length %> <span style="font-size: 1rem; font-weight: 500; color: var(--text-muted);">processos</span>
+    </div>
+    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 6px; font-weight: 500;">
+      Aguardando liberação de folha
+    </div>
+  </div>
+
+  <!-- Card 3: Conformidade de SLA (Verde Esmeralda) -->
+  <div class="metric-card success">
+    <div class="metric-title">Eficiência de SLA</div>
+    <div class="metric-value" style="font-size: 1.8rem; color: var(--success);">
+      <%= taxaSla %>%
+    </div>
+    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 6px; font-weight: 500;">
+      <%= atrasados.length %> processos em atraso
+    </div>
+  </div>
+
+  <!-- Card 4: Backlog de Fila (Tons Neutros / Slate) -->
+  <div class="metric-card">
+    <div class="metric-title">Esteira em Trâmite</div>
+    <div class="metric-value" style="font-size: 1.8rem; color: var(--text-main);">
+      <%= ativos.length %> <span style="font-size: 1rem; font-weight: 500; color: var(--text-muted);">ativos</span>
+    </div>
+    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 6px; font-weight: 500;">
+      Judiciais ativos: <%= prioridadeJudicial %>
+    </div>
+  </div>
+</div>
+
+<!-- ================= SEÇÃO 2: ABAS DE CONTROLE ESTRATÉGICO ================= -->
+<div class="controls-row" style="margin-bottom: 2rem;">
+  <div class="tabs-container" style="display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 0.25rem; padding: 0.25rem;">
+    <button id="tab-btn-resumo" class="tab-btn active" onclick="switchGestorTab('resumo')">
+      Painel Geral
+    </button>
+    <button id="tab-btn-homologar" class="tab-btn" onclick="switchGestorTab('homologar')">
+      Homologar <span id="count-homologar" class="badge-bubble"><%= aprovados.length %></span>
+    </button>
+    <button id="tab-btn-financeira" class="tab-btn" onclick="switchGestorTab('financeira')">
+      Folha <span id="count-financeira" class="badge-bubble"><%= aptos.length %></span>
+    </button>
+    <button id="tab-btn-orcamento" class="tab-btn" onclick="switchGestorTab('orcamento')">
+      Orçamento
+    </button>
+    <button id="tab-btn-renovacao" class="tab-btn" onclick="switchGestorTab('renovacao')">
+      Renovações <span id="count-renovacao" class="badge-bubble">0</span>
+    </button>
+    <button id="tab-btn-distribuicao" class="tab-btn" onclick="switchGestorTab('distribuicao')">
+      Mapeamento
+    </button>
+    <button id="tab-btn-auditoria" class="tab-btn" onclick="switchGestorTab('auditoria')">
+      Gargalos <span id="count-auditoria" class="badge-bubble"><%= ativos.length %></span>
+    </button>
+  </div>
+</div>
+
+<!-- ================= ABA 1: PAINEL GERAL (RESUMO ESTRATÉGICO) ================= -->
+<div id="tab-content-resumo" class="tab-panel-content">
+  <div class="dashboard-grid">
+    <!-- Bloco Esquerdo: Monitoramento e Prazos -->
+    <div>
+      <div class="section-card">
+        <div class="section-header">
+          <h2 class="section-title">Acompanhamento e Gestão Orçamentária</h2>
+        </div>
+        <div class="section-content">
+          <p style="color: var(--text-muted); line-height: 1.6; margin-bottom: 1.5rem; font-size: 0.95rem;">
+            O painel orçamentário do Aluguel Social permite o controle executivo de desembolsos em tempo real. Toda concessão de benefício aprovada pelas equipes do SUAS ou SEDSODH deve ser homologada nesta página para integrar a folha de pagamento.
+          </p>
+
+          <div class="dashboard-form-grid" style="margin-top: 1rem;">
+            <div style="background-color: var(--primary-light); border: 1.5px solid rgba(30, 58, 138, 0.1); border-radius: var(--radius-md); padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 120px;">
+              <span style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--primary); letter-spacing: 0.5px; display: block; margin-bottom: 4px;">Valor Unitário Portaria</span>
+              <strong style="font-size: 1.65rem; color: var(--primary); font-family: var(--font-title); display: block; margin-top: auto; margin-bottom: auto;">R$ <%= valorBase.toFixed(2) %></strong>
+              <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 4px;">Fixado por ato executivo municipal</span>
+            </div>
+            
+            <div style="background-color: var(--bg-app); border: 1.5px solid var(--border-color); border-radius: var(--radius-md); padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 120px;">
+              <span style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px; display: block; margin-bottom: 4px;">Total de Processos</span>
+              <strong style="font-size: 1.65rem; color: var(--text-main); font-family: var(--font-title); display: block; margin-top: auto; margin-bottom: auto;"><%= estatisticas.total %></strong>
+              <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 4px;">Histórico acumulado do programa</span>
+            </div>
+          </div>
+
+          <div style="margin-top: 2rem; border-top: 1px dashed var(--border-color); padding-top: 1.5rem;">
+            <h3 style="font-family: var(--font-title); font-size: 1rem; color: var(--primary); margin-bottom: 0.5rem;">
+              Auditoria de Backlog e Gargalos
+            </h3>
+            <p style="font-size: 0.875rem; color: var(--text-muted); line-height: 1.5;">
+              <% if (atrasados.length > 0) { %>
+                Atenção: Constam <strong class="text-danger"><%= atrasados.length %> processos fora do prazo regulamentar</strong> nas filas de análise. Recomenda-se acompanhamento imediato das equipes de triagem para evitar passivos processuais.
+              <% } else { %>
+                Excelente: <strong class="text-success">100% dos processos ativos estão com prazos de análise regulamentares em dia</strong>. Fila operacional fluida e livre de atrasos.
+              <% } %>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bloco Direito: Detalhamento Fila Geral (Composição de Status) -->
+    <div>
+      <div class="section-card">
+        <div class="section-header">
+          <h2 class="section-title">Composição da Fila Geral</h2>
+        </div>
+        <div class="section-content" style="padding: 1.5rem 2rem;">
+          <ul style="list-style: none; display: flex; flex-direction: column; gap: 0.85rem;">
+            <li style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+              <span style="font-size: 0.9rem; font-weight: 500;">Em Elaboração (Rascunho)</span>
+              <span class="status-tag rascunho" style="font-size:0.7rem;"><%= processos.filter(p => p.statusAtual === 'RASCUNHO').length %></span>
+            </li>
+            <li style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+              <span style="font-size: 0.9rem; font-weight: 500;">Aguardando Triagem</span>
+              <span class="status-tag triagem" style="font-size:0.7rem;"><%= processos.filter(p => p.statusAtual === 'TRIAGEM').length %></span>
+            </li>
+            <li style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+              <span style="font-size: 0.9rem; font-weight: 500;">Em Análise Técnico/Social</span>
+              <span class="status-tag analise" style="font-size:0.7rem;"><%= processos.filter(p => p.statusAtual === 'ANALISE').length %></span>
+            </li>
+            <li style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+              <span style="font-size: 0.9rem; font-weight: 500;">Deferidos Técnicos (Homologação)</span>
+              <span class="status-tag aprovado" style="font-size:0.7rem;"><%= estatisticas.aprovado %></span>
+            </li>
+            <li style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+              <span style="font-size: 0.9rem; font-weight: 500;">Aptos para Pagamento</span>
+              <span class="status-tag apto_pagamento" style="font-size:0.7rem;"><%= estatisticas.aptoPagamento %></span>
+            </li>
+            <li style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+              <span style="font-size: 0.9rem; font-weight: 500;">Recursos Administrativos</span>
+              <span class="status-tag recurso" style="font-size:0.7rem;"><%= processos.filter(p => p.statusAtual === 'RECURSO').length %></span>
+            </li>
+            <li style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+              <span style="font-size: 0.9rem; font-weight: 500;">Indeferidos Definitivos</span>
+              <span class="status-tag indeferido" style="font-size:0.7rem;"><%= estatisticas.indeferido %></span>
+            </li>
+            <li style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 4px;">
+              <span style="font-size: 0.9rem; font-weight: 500;">Benefícios Suspensos</span>
+              <span class="status-tag suspenso" style="font-size:0.7rem;"><%= processos.filter(p => p.statusAtual === 'SUSPENSO').length %></span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Alertas de Renovação Pendente (Vencendo em até 60 dias) -->
+      <div class="section-card" style="margin-top: 1.5rem;">
+        <div class="section-header" style="background-color: #fff7ed; border-bottom: 1px solid #ffedd5;">
+          <h2 class="section-title" style="color: #c2410c; margin: 0;">⚠️ Alertas de Renovação (≤ 60 dias)</h2>
+        </div>
+        <div class="section-content" style="padding: 1.25rem 1.5rem;">
+          <div id="alertas-renovacao-container" style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <p style="color: var(--text-muted); font-size: 0.85rem; font-style: italic; text-align: center; margin: 0; padding: 0.75rem;">
+              Nenhum benefício requer renovação imediata nos próximos 60 dias.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ABA 2: HOMOLOGAÇÃO DE PROCESSOS APROVADOS ================= -->
+<div id="tab-content-homologar" class="tab-panel-content" style="display: none;">
+  <div class="controls-row">
+    <div class="search-container" style="min-width: 320px;">
+      <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"></circle>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+      </svg>
+      <input type="text" id="busca-homologacao" class="search-input" placeholder="Buscar por SEI ou Cidadã..." onkeyup="filtrarHomologacao()">
+    </div>
+  </div>
+
+  <div class="section-card">
+    <div class="section-header">
+      <h2 class="section-title">Aguardando Homologação Financeira e Inclusão em Folha</h2>
+    </div>
+    <div class="section-content" style="padding: 0;">
+      <div class="table-responsive">
+        <table class="custom-table" id="tabela-homologacao-list">
+          <thead>
+            <tr class="bg-slate-50 text-slate-500 font-semibold text-xs tracking-wider uppercase border-b border-slate-200">
+              <th>Processo SEI</th>
+              <th>Cidadã (CPF)</th>
+              <th>Origem</th>
+              <th>Status Técnico</th>
+              <th>Data Homologação</th>
+              <th class="text-right">Ação Financeira</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (aprovados.length === 0) { %>
+              <tr class="sem-homologacao-row">
+                <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+                  Nenhum processo aprovado pendente de homologação financeira.
+                </td>
+              </tr>
+            <% } else { %>
+              <% aprovados.forEach(p => { %>
+                <tr class="homologacao-row" data-id="<%= p.id %>" data-sei="<%= p.numeroProcessoSei %>" data-nome="<%= p.beneficiaria.nome %>" data-cpf="<%= p.beneficiaria.cpf %>" style="cursor: pointer;" onclick="abrirDrawerFicha('<%= p.id %>')">
+                  <td><strong><%= p.numeroProcessoSei %></strong></td>
+                  <td>
+                    <div class="confidential-wrapper" onclick="event.stopPropagation();">
+                      <span class="confidential-data blurred"><%= p.beneficiaria.nome %> (<%= p.beneficiaria.cpf %>)</span>
+                      <button class="btn-toggle-sigilo" onclick="toggleSigilo(this)" title="Exibir/Ocultar Dados">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                        Exibir
+                      </button>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="esteira-tag <%= p.tipoEsteira.toLowerCase() %>">
+                      Esteira <%= p.tipoEsteira %>
+                    </span>
+                  </td>
+                  <td>
+                    <span class="status-tag aprovado">
+                      <%= p.statusAtual %>
+                    </span>
+                  </td>
+                  <td><%= new Date(p.dataLimiteAnalise).toLocaleDateString('pt-BR') %></td>
+                  <td class="text-right">
+                    <div class="action-btn-group flex gap-2 justify-end" onclick="event.stopPropagation();">
+                      <button class="btn-action-primary" onclick="homologarParaPagamento('<%= p.id %>')">
+                        Homologar Pagamento
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              <% }) %>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+      
+      <!-- Paginação Homologação -->
+      <div class="pagination-container">
+        <div class="pagination-select-wrapper">
+          <span>Itens por página:</span>
+          <select class="pagination-select" id="limit-tabela-homologacao-list" onchange="alterarLimiteHomologacao()">
+            <option value="5" selected>5</option>
+            <option value="10">10</option>
+            <option value="15">15</option>
+          </select>
+        </div>
+        <div class="pagination-info" id="info-tabela-homologacao-list">
+          Exibindo 0-0 de 0 processos
+        </div>
+        <div class="pagination-controls">
+          <button class="pagination-btn" id="btn-prev-tabela-homologacao-list" onclick="pagHomologacaoAnt()">Ant.</button>
+          <button class="pagination-btn" id="btn-next-tabela-homologacao-list" onclick="pagHomologacaoProx()">Próx.</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ABA 3: FILA FINANCEIRA (PAGAMENTOS) ================= -->
+<div id="tab-content-financeira" class="tab-panel-content" style="display: none;">
+  <!-- Seção de Exportação da Folha Financeira -->
+  <div class="bg-white border border-slate-200 shadow-sm rounded-xl p-8 max-w-3xl mx-auto my-6 text-center">
+    <div class="w-16 h-16 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 mx-auto mb-4">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="4"></line><line x1="8" y1="2" x2="8" y2="4"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+    </div>
+    
+    <h2 class="text-gov-900 font-display font-bold text-xl mb-2">Exportação de Folha de Pagamentos</h2>
+    <p class="text-slate-500 text-sm mb-6 max-w-md mx-auto">
+      Gere a folha de pagamento contendo os dados bancários validados das cidadãs aptas para recebimento do Aluguel Social.
+    </p>
+
+    <div class="grid grid-cols-2 gap-4 max-w-sm mx-auto mb-8">
+      <div class="bg-slate-50 border border-slate-100 rounded-lg p-4">
+        <span class="text-xs text-slate-400 font-bold block mb-1">REQUERIMENTOS</span>
+        <strong class="text-2xl text-gov-800"><%= aptos.length %></strong>
+      </div>
+      <div class="bg-slate-50 border border-slate-100 rounded-lg p-4">
+        <span class="text-xs text-slate-400 font-bold block mb-1">TOTAL DA FOLHA</span>
+        <strong class="text-lg text-gov-800">R$ <%= custoMensal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></strong>
+      </div>
+    </div>
+
+    <div class="flex justify-center gap-4">
+      <button onclick="exportarDadosFinanceiros()" class="btn-action-primary" style="padding: 0.75rem 2rem; font-size: 0.95rem;">
+        Exportar Planilha Financeira (CSV)
+      </button>
+    </div>
+  </div>
+
+  <!-- Tabela de Referência Oculta -->
+  <table id="tabela-financeira-list" style="display: none;">
+    <tbody>
+      <% aptos.forEach(p => { 
+        let bancoObj = { banco: 'N/A', agencia: 'N/A', conta: 'N/A' };
+        try {
+          if (p.beneficiaria.dadosBancariosManuais) {
+            bancoObj = JSON.parse(p.beneficiaria.dadosBancariosManuais);
+          }
+        } catch(e){}
+      %>
+        <tr class="financeiro-row">
+          <td><%= p.numeroProcessoSei %></td>
+          <td><%= p.beneficiaria.nome %></td>
+          <td><%= p.beneficiaria.cpf %></td>
+          <td>Bco: <%= bancoObj.banco %> | Ag: <%= bancoObj.agencia %> | Cc: <%= bancoObj.conta %></td>
+          <td><%= p.tipoEsteira %></td>
+          <td>R$ <%= valorBase.toFixed(2) %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+
+<!-- ================= ABA 4: GESTÃO ORÇAMENTÁRIA ================= -->
+<div id="tab-content-orcamento" class="tab-panel-content" style="display: none;">
+  <!-- Acompanhamento Orçamentário Histórico (Ano a Ano, Mês a Mês) -->
+  <div class="section-card" style="margin-top: 1rem; margin-bottom: 2rem;">
+    <div class="section-header">
+      <h2 class="section-title">Acompanhamento e Histórico Orçamentário (Ano a Ano)</h2>
+    </div>
+    <div class="section-content" style="padding: 0;">
+      <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color); background-color: var(--primary-light);">
+        <p style="font-size: 0.85rem; color: var(--primary); line-height: 1.5; margin: 0; font-weight: 500;">
+          📌 <strong>Lógica Recorrente Acumulada:</strong> Benefícios com status <em>APTO_PAGAMENTO</em> (Folha Ativa) continuam sendo pagos a cada mês de vigência ativo. Os meses futuros do ano corrente são projetados estimando a continuidade dessa folha.
+        </p>
+      </div>
+      <div class="table-responsive">
+        <table class="custom-table" id="tabela-historico-anos">
+          <thead>
+            <tr class="bg-slate-50 text-slate-500 font-semibold text-xs tracking-wider uppercase border-b border-slate-200">
+              <th>Mês de Referência</th>
+              <th class="text-right">Desembolso 2026 (Realizado / Proj)</th>
+              <th class="text-right">Desembolso 2027 (Projetado)</th>
+              <th class="text-right">Desembolso 2028 (Projetado)</th>
+              <th class="text-right">Variação Anual (26 ➔ 27)</th>
+            </tr>
+          </thead>
+          <tbody id="corpo-tabela-anos">
+            <!-- Populado dinamicamente via JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ABA: ALERTAS DE RENOVAÇÃO ================= -->
+<div id="tab-content-renovacao" class="tab-panel-content" style="display: none;">
+  <div class="section-card" style="margin-top: 1rem; margin-bottom: 2rem;">
+    <div class="section-header" style="background-color: #fff7ed; border-bottom: 1px solid #ffedd5;">
+      <h2 class="section-title" style="color: #c2410c; margin: 0;">⚠️ Benefícios Expirando nos Próximos 60 Dias (Vencimento de Vigência)</h2>
+    </div>
+    <div class="section-content" style="padding: 0;">
+      <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color); background-color: #fffbeb;">
+        <p style="font-size: 0.85rem; color: #b45309; line-height: 1.5; margin: 0; font-weight: 500;">
+          💡 <strong>Ação Recomendada:</strong> Requerimentos ativos que estejam a menos de 60 dias de completarem 12 meses de recebimento contínuo devem ter seus processos de renovação ou descontinuidade iniciados pelos assistentes sociais do SUAS.
+        </p>
+      </div>
+      <div class="table-responsive">
+        <table class="custom-table" id="tabela-renovacao-list">
+          <thead>
+            <tr class="bg-slate-50 text-slate-500 font-semibold text-xs tracking-wider uppercase border-b border-slate-200">
+              <th>Processo SEI</th>
+              <th>Cidadã (CPF)</th>
+              <th>Início Vigência</th>
+              <th>Fim Vigência</th>
+              <th>Dias Restantes</th>
+              <th class="text-right">Ação Operacional</th>
+            </tr>
+          </thead>
+          <tbody id="corpo-tabela-renovacao">
+            <tr>
+              <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+                Nenhum benefício requer renovação nos próximos 60 dias.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ABA 5: MAPAS E DEMOGRAFIA ================= -->
+<div id="tab-content-distribuicao" class="tab-panel-content" style="display: none;">
+  <!-- Grid Superior: Vulnerabilidade Social e Faixas Demográficas -->
+  <div class="dashboard-grid" style="margin-bottom: 2rem;">
+    <!-- Card 1: Perfil de Vulnerabilidade Social (Renda per Capita) -->
+    <div class="section-card">
+      <div class="section-header">
+        <h2 class="section-title">Nível de Vulnerabilidade das Cidadãs (Portaria MDS)</h2>
+      </div>
+      <div class="section-content" style="padding: 1.5rem 2rem;">
+        <div id="analytics-vulnerabilidade" style="display: flex; flex-direction: column; gap: 1rem;">
+          <p style="color: var(--text-muted); text-align: center; padding: 1.5rem;">Carregando faixas de vulnerabilidade...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 2: Destaques de Prioridades de Proteção Especial -->
+    <div class="section-card">
+      <div class="section-header">
+        <h2 class="section-title">Critérios Especiais e Prioritários (SUAS)</h2>
+      </div>
+      <div class="section-content" style="padding: 1.5rem 2rem;">
+        <div id="analytics-prioridades" style="display: flex; flex-direction: column; gap: 1rem;">
+          <p style="color: var(--text-muted); text-align: center; padding: 1.5rem;">Carregando critérios especiais...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nova Seção: Detalhamento de Ingressos do Mês Corrente por Status -->
+  <div class="section-card" style="margin-bottom: 2rem;">
+    <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+      <h2 class="section-title" id="titulo-explosao-mes" style="margin-bottom: 0;">Explosão de Status dos Ingressos</h2>
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <label for="filtro-mes-ano-explosao" style="font-size: 0.8rem; font-weight:600; color: var(--text-muted);">Período:</label>
+        <select id="filtro-mes-ano-explosao" class="pagination-select" style="padding: 0.35rem 2rem 0.35rem 0.75rem;" onchange="filtrarExplosaoMesAno()">
+          <option value="0-2026">Janeiro/2026</option>
+          <option value="1-2026">Fevereiro/2026</option>
+          <option value="2-2026">Março/2026</option>
+          <option value="3-2026">Abril/2026</option>
+          <option value="4-2026" selected>Maio/2026</option>
+          <option value="5-2026">Junho/2026</option>
+          <option value="6-2026">Julho/2026</option>
+          <option value="7-2026">Agosto/2026</option>
+          <option value="8-2026">Setembro/2026</option>
+          <option value="9-2026">Outubro/2026</option>
+          <option value="10-2026">Novembro/2026</option>
+          <option value="11-2026">Dezembro/2026</option>
+          <option value="--sep--" disabled>--- 2025 ---</option>
+          <option value="0-2025">Janeiro/2025</option>
+          <option value="1-2025">Fevereiro/2025</option>
+          <option value="2-2025">Março/2025</option>
+          <option value="3-2025">Abril/2025</option>
+          <option value="4-2025">Maio/2025</option>
+          <option value="5-2025">Junho/2025</option>
+          <option value="6-2025">Julho/2025</option>
+          <option value="7-2025">Agosto/2025</option>
+          <option value="8-2025">Setembro/2025</option>
+          <option value="9-2025">Outubro/2025</option>
+          <option value="10-2025">Novembro/2025</option>
+          <option value="11-2025">Dezembro/2025</option>
+        </select>
+      </div>
+    </div>
+    <div class="section-content" style="padding: 1.5rem 2rem;">
+      <div id="analytics-explosao-mes" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1.25rem;">
+        <p style="color: var(--text-muted); text-align: center; grid-column: 1 / -1; padding: 1.5rem;">Carregando status dos ingressos...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gráficos Demográficos -->
+  <div class="dashboard-grid" style="margin-bottom: 2rem;">
+    <!-- Perfil Demográfico -->
+    <div class="section-card">
+      <div class="section-header">
+        <h2 class="section-title">Perfil Sociodemográfico por Faixa Etária</h2>
+      </div>
+      <div class="section-content">
+        <div class="bar-chart-container" id="chart-idades" style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <p style="color: var(--text-muted); text-align: center; padding: 2rem;">Carregando dados demográficos...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Esteiras -->
+    <div class="section-card">
+      <div class="section-header">
+        <h2 class="section-title">Esteiras de Análise Ativas</h2>
+      </div>
+      <div class="section-content">
+        <div class="bar-chart-container" id="chart-esteiras" style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <p style="color: var(--text-muted); text-align: center; padding: 2rem;">Carregando esteiras...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Evolução Mensal de Novos Requerimentos -->
+  <div class="section-card">
+    <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+      <h2 class="section-title" style="margin-bottom: 0;">Evolução Mensal de Novos Requerimentos (Solicitados vs Aprovados)</h2>
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <label for="filtro-ano-evolucao" style="font-size: 0.8rem; font-weight:600; color: var(--text-muted);">Filtrar por Ano:</label>
+        <select id="filtro-ano-evolucao" class="pagination-select" style="padding: 0.35rem 2rem 0.35rem 0.75rem;" onchange="filtrarEvolucaoAno()">
+          <option value="2026" selected>2026</option>
+          <option value="2025">2025</option>
+          <option value="2027">2027 (Proj)</option>
+        </select>
+      </div>
+    </div>
+    <div class="section-content">
+      <div class="bar-chart-container" id="chart-mensal" style="display: flex; flex-direction: column; gap: 1rem; padding: 1rem 0;">
+        <p style="color: var(--text-muted); text-align: center; padding: 2rem;">Carregando histórico mensal...</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ABA 5: GARGALOS OPERACIONAIS & AUDITORIA SLA ================= -->
+<div id="tab-content-auditoria" class="tab-panel-content" style="display: none;">
+  <!-- Filtros de Auditoria -->
+  <div class="controls-row" style="margin-bottom: 1.5rem;">
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap; flex-grow: 1;">
+      <div class="search-container" style="min-width: 280px; flex-grow: 1;">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" id="busca-auditoria" class="search-input" placeholder="Buscar na fila de auditoria..." onkeyup="filtrarAuditoria()">
+      </div>
+
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <label for="filtro-sla-auditoria" style="font-size: 0.8rem; font-weight:600; color: var(--text-muted); white-space: nowrap;">SLA:</label>
+        <select id="filtro-sla-auditoria" class="pagination-select" style="padding: 0.35rem 2rem 0.35rem 0.75rem;" onchange="filtrarAuditoria()">
+          <option value="TODOS" selected>Todos os Prazos</option>
+          <option value="ATRASADOS">Apenas Atrasados</option>
+          <option value="EM_DIA">Em Dia</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabela de Auditoria -->
+  <div class="section-card">
+    <div class="section-header">
+      <h2 class="section-title">Auditoria e Monitoramento da Fila de Tramitação</h2>
+    </div>
+    <div class="section-content" style="padding: 0;">
+      <div class="table-responsive">
+        <table class="custom-table" id="tabela-auditoria-list">
+          <thead>
+            <tr>
+              <th>Processo SEI</th>
+              <th>Cidadã (CPF)</th>
+              <th>Fase Atual</th>
+              <th>Esteira</th>
+              <th>Data Limite SLA</th>
+              <th>Status do Prazo</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (ativos.length === 0) { %>
+              <tr class="sem-auditoria-row">
+                <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+                  Nenhum processo em trâmite ativo.
+                </td>
+              </tr>
+            <% } else { 
+              const ativosOrdenados = [...ativos].sort((a,b) => new Date(a.dataLimiteAnalise) - new Date(b.dataLimiteAnalise));
+              ativosOrdenados.forEach(p => {
+                const limite = new Date(p.dataLimiteAnalise);
+                const diffMs = limite - agora;
+                const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+                
+                let slaBadgeClass = 'green';
+                let slaText = 'Em Dia';
+                let slaDesc = `${diffDays} dias restantes`;
+                
+                if (diffDays < 0) {
+                  slaBadgeClass = 'red';
+                  slaText = 'Atrasado';
+                  slaDesc = `Vencido há ${Math.abs(diffDays)} dias`;
+                } else if (diffDays <= 2) {
+                  slaBadgeClass = 'yellow';
+                  slaText = 'Crítico';
+                  slaDesc = `Vence em ${diffDays} dias`;
+                }
+            %>
+              <tr class="auditoria-row" data-id="<%= p.id %>" data-sei="<%= p.numeroProcessoSei %>" data-nome="<%= p.beneficiaria.nome %>" data-cpf="<%= p.beneficiaria.cpf %>" data-status-sla="<%= diffDays < 0 ? 'ATRASADO' : 'EM_DIA' %>" style="cursor: pointer;" onclick="abrirDrawerFicha('<%= p.id %>')">
+                <td><strong><%= p.numeroProcessoSei %></strong></td>
+                <td>
+                  <div class="confidential-wrapper" onclick="event.stopPropagation();">
+                    <span class="confidential-data blurred"><%= p.beneficiaria.nome %> (<%= p.beneficiaria.cpf %>)</span>
+                    <button class="btn-toggle-sigilo" onclick="toggleSigilo(this)" title="Exibir/Ocultar Dados">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                      Exibir
+                    </button>
+                  </div>
+                </td>
+                <td>
+                  <span class="status-tag <%= p.statusAtual.toLowerCase() %>">
+                    <%= p.statusAtual %>
+                  </span>
+                </td>
+                <td>
+                  <span class="esteira-tag <%= p.tipoEsteira.toLowerCase() %>">
+                    <%= p.tipoEsteira %>
+                  </span>
+                </td>
+                <td><strong><%= limite.toLocaleDateString('pt-BR') %></strong></td>
+                <td>
+                  <span class="sla-badge <%= slaBadgeClass %>">
+                    <%= slaText %> (<%= slaDesc %>)
+                  </span>
+                </td>
+              </tr>
+            <% }) %>
+          <% } %>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Paginação Auditoria -->
+      <div class="pagination-container">
+        <div class="pagination-select-wrapper">
+          <span>Itens por página:</span>
+          <select class="pagination-select" id="limit-tabela-auditoria-list" onchange="alterarLimiteAuditoria()">
+            <option value="5" selected>5</option>
+            <option value="10">10</option>
+            <option value="15">15</option>
+          </select>
+        </div>
+        <div class="pagination-info" id="info-tabela-auditoria-list">
+          Exibindo 0-0 de 0 processos
+        </div>
+        <div class="pagination-controls">
+          <button class="pagination-btn" id="btn-prev-tabela-auditoria-list" onclick="pagAuditoriaAnt()">Ant.</button>
+          <button class="pagination-btn" id="btn-next-tabela-auditoria-list" onclick="pagAuditoriaProx()">Próx.</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= GAVETA LATERAL DE DETALHES DO GESTOR ================= -->
+<div id="drawer-overlay" class="drawer-overlay" onclick="fecharDrawerFicha()"></div>
+<div id="ficha-drawer" class="drawer">
+  <div class="drawer-header">
+    <h3 class="drawer-title" id="drawer-header-title">Ficha Técnica do Processo</h3>
+    <button onclick="fecharDrawerFicha()" class="drawer-close">&times;</button>
+  </div>
+  
+  <div class="drawer-body" id="drawer-ficha-content">
+    <!-- Renderizado dinamicamente via JS -->
+  </div>
+  
+  <div class="drawer-footer" id="drawer-actions-footer">
+    <button onclick="fecharDrawerFicha()" class="btn-secondary">Fechar Gaveta</button>
+  </div>
+</div>
+
+<!-- Dados brutos serializados -->
+<textarea id="processos-raw-data" style="display: none;"><%- JSON.stringify(processos) %></textarea>
+
+<script>
+  const dbProcessos = JSON.parse(document.getElementById('processos-raw-data').value);
+
+  // Estados locais das abas e paginações
+  const auditoriaPag = { pag: 1, limit: 5 };
+  const homologacaoPag = { pag: 1, limit: 5 };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    carregarGraficosEstatisticos();
+    
+    inicializarAtributosTabela('tabela-auditoria-list', 'auditoria-row');
+    inicializarAtributosTabela('tabela-homologacao-list', 'homologacao-row');
+    
+    aplicarPaginacaoAuditoria();
+    aplicarPaginacaoHomologacao();
+  });
+
+  function switchGestorTab(tabName) {
+    document.querySelectorAll('.tab-panel-content').forEach(panel => {
+      panel.style.display = 'none';
+    });
+    document.querySelectorAll('.tabs-container .tab-btn').forEach(btn => {
+      btn.classList.remove('active');
+    });
+
+    document.getElementById(`tab-content-${tabName}`).style.display = 'block';
+    document.getElementById(`tab-btn-${tabName}`).classList.add('active');
+  }
+
+  function inicializarAtributosTabela(tableId, rowClass) {
+    document.querySelectorAll(`#${tableId} .${rowClass}`).forEach(row => {
+      row.setAttribute('data-filtered-out', 'false');
+    });
+  }
+
+  // --- CONTROLES FILA DE AUDITORIA ---
+  function filtrarAuditoria() {
+    const q = document.getElementById('busca-auditoria').value.toLowerCase().trim();
+    const sla = document.getElementById('filtro-sla-auditoria').value;
+    
+    const rows = document.querySelectorAll('#tabela-auditoria-list .auditoria-row');
+    rows.forEach(row => {
+      const sei = row.getAttribute('data-sei').toLowerCase();
+      const nome = row.getAttribute('data-nome').toLowerCase();
+      const cpf = row.getAttribute('data-cpf').toLowerCase();
+      const statusSla = row.getAttribute('data-status-sla');
+      
+      const matchText = sei.includes(q) || nome.includes(q) || cpf.includes(q);
+      const matchSla = sla === 'TODOS' || statusSla === sla;
+      
+      if (matchText && matchSla) {
+        row.setAttribute('data-filtered-out', 'false');
+      } else {
+        row.setAttribute('data-filtered-out', 'true');
+      }
+    });
+
+    auditoriaPag.pag = 1;
+    aplicarPaginacaoAuditoria();
+  }
+
+  function aplicarPaginacaoAuditoria() {
+    const tableId = 'tabela-auditoria-list';
+    const rows = Array.from(document.querySelectorAll(`#${tableId} .auditoria-row`));
+    const filteredRows = rows.filter(row => row.getAttribute('data-filtered-out') !== 'true');
+    
+    const total = filteredRows.length;
+    const limit = auditoriaPag.limit;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    
+    if (auditoriaPag.pag > totalPages) auditoriaPag.pag = totalPages;
+    if (auditoriaPag.pag < 1) auditoriaPag.pag = 1;
+    
+    const start = (auditoriaPag.pag - 1) * limit;
+    const end = Math.min(start + limit, total);
+    
+    rows.forEach(row => row.style.display = 'none');
+    filteredRows.slice(start, end).forEach(row => row.style.display = '');
+
+    const info = document.getElementById(`info-${tableId}`);
+    if (info) {
+      info.textContent = total === 0 ? 'Nenhum processo na fila de auditoria' : `Exibindo ${start + 1}-${end} de ${total} em andamento`;
+    }
+
+    document.getElementById(`btn-prev-${tableId}`).disabled = auditoriaPag.pag === 1;
+    document.getElementById(`btn-next-${tableId}`).disabled = auditoriaPag.pag === totalPages;
+  }
+
+  function pagAuditoriaAnt() {
+    if (auditoriaPag.pag > 1) {
+      auditoriaPag.pag--;
+      aplicarPaginacaoAuditoria();
+    }
+  }
+
+  function pagAuditoriaProx() {
+    const rows = Array.from(document.querySelectorAll('#tabela-auditoria-list .auditoria-row'));
+    const filteredRows = rows.filter(row => row.getAttribute('data-filtered-out') !== 'true');
+    const totalPages = Math.ceil(filteredRows.length / auditoriaPag.limit);
+    if (auditoriaPag.pag < totalPages) {
+      auditoriaPag.pag++;
+      aplicarPaginacaoAuditoria();
+    }
+  }
+
+  function alterarLimiteAuditoria() {
+    auditoriaPag.limit = parseInt(document.getElementById('limit-tabela-auditoria-list').value, 10);
+    auditoriaPag.pag = 1;
+    aplicarPaginacaoAuditoria();
+  }
+
+  // --- CONTROLES FILA DE HOMOLOGAÇÃO ---
+  function filtrarHomologacao() {
+    const q = document.getElementById('busca-homologacao').value.toLowerCase().trim();
+    
+    const rows = document.querySelectorAll('#tabela-homologacao-list .homologacao-row');
+    rows.forEach(row => {
+      const sei = row.getAttribute('data-sei').toLowerCase();
+      const nome = row.getAttribute('data-nome').toLowerCase();
+      const cpf = row.getAttribute('data-cpf').toLowerCase();
+      
+      const matchText = sei.includes(q) || nome.includes(q) || cpf.includes(q);
+      
+      if (matchText) {
+        row.setAttribute('data-filtered-out', 'false');
+      } else {
+        row.setAttribute('data-filtered-out', 'true');
+      }
+    });
+
+    homologacaoPag.pag = 1;
+    aplicarPaginacaoHomologacao();
+  }
+
+  function aplicarPaginacaoHomologacao() {
+    const tableId = 'tabela-homologacao-list';
+    const rows = Array.from(document.querySelectorAll(`#${tableId} .homologacao-row`));
+    const filteredRows = rows.filter(row => row.getAttribute('data-filtered-out') !== 'true');
+    
+    const total = filteredRows.length;
+    const limit = homologacaoPag.limit;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    
+    if (homologacaoPag.pag > totalPages) homologacaoPag.pag = totalPages;
+    if (homologacaoPag.pag < 1) homologacaoPag.pag = 1;
+    
+    const start = (homologacaoPag.pag - 1) * limit;
+    const end = Math.min(start + limit, total);
+    
+    rows.forEach(row => row.style.display = 'none');
+    filteredRows.slice(start, end).forEach(row => row.style.display = '');
+
+    const info = document.getElementById(`info-${tableId}`);
+    if (info) {
+      info.textContent = total === 0 ? 'Nenhum processo aguardando homologação' : `Exibindo ${start + 1}-${end} de ${total} aguardando homologação`;
+    }
+
+    document.getElementById(`btn-prev-${tableId}`).disabled = homologacaoPag.pag === 1;
+    document.getElementById(`btn-next-${tableId}`).disabled = homologacaoPag.pag === totalPages;
+  }
+
+  function pagHomologacaoAnt() {
+    if (homologacaoPag.pag > 1) {
+      homologacaoPag.pag--;
+      aplicarPaginacaoHomologacao();
+    }
+  }
+
+  function pagHomologacaoProx() {
+    const rows = Array.from(document.querySelectorAll('#tabela-homologacao-list .homologacao-row'));
+    const filteredRows = rows.filter(row => row.getAttribute('data-filtered-out') !== 'true');
+    const totalPages = Math.ceil(filteredRows.length / homologacaoPag.limit);
+    if (homologacaoPag.pag < totalPages) {
+      homologacaoPag.pag++;
+      aplicarPaginacaoHomologacao();
+    }
+  }
+
+  function alterarLimiteHomologacao() {
+    homologacaoPag.limit = parseInt(document.getElementById('limit-tabela-homologacao-list').value, 10);
+    homologacaoPag.pag = 1;
+    aplicarPaginacaoHomologacao();
+  }
+
+  async function homologarParaPagamento(id) {
+    const confirmacao = confirm("Deseja realmente homologar este requerimento aprovado e liberá-lo para a folha de pagamento ativa?");
+    if (!confirmacao) return;
+
+    try {
+      const response = await fetch(`/api/processos/${id}/status`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ status: 'APTO_PAGAMENTO' })
+      });
+      
+      const res = await response.json();
+      if (res.success) {
+        fecharDrawerFicha();
+        window.location.reload();
+      } else {
+        mostrarAlerta('danger', res.error);
+      }
+    } catch (error) {
+      mostrarAlerta('danger', 'Erro ao homologar processo.');
+    }
+  }
+
+  // --- DRAWER DE DETALHES DO GESTOR ---
+  function abrirDrawerFicha(id) {
+    const p = dbProcessos.find(proc => proc.id === id);
+    if (!p) return;
+
+    document.getElementById('drawer-header-title').textContent = `Processo SEI: ${p.numeroProcessoSei}`;
+
+    let dadosBancarios = { banco: 'Não Cadastrado', agencia: 'N/A', conta: 'N/A' };
+    try {
+      if (p.beneficiaria.dadosBancariosManuais) {
+        dadosBancarios = JSON.parse(p.beneficiaria.dadosBancariosManuais);
+      }
+    } catch(e){}
+
+    const content = document.getElementById('drawer-ficha-content');
+    content.innerHTML = `
+      <!-- Situação -->
+      <div class="drawer-section">
+        <div class="drawer-section-title">Situação do Requerimento</div>
+        <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+          <span class="status-tag ${p.statusAtual.toLowerCase()}" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">
+            ${p.statusAtual}
+          </span>
+          <span class="esteira-tag ${p.tipoEsteira.toLowerCase()}" style="font-size: 0.8rem; padding: 0.35rem 0.7rem;">
+            Esteira ${p.tipoEsteira}
+          </span>
+        </div>
+      </div>
+
+      <!-- Beneficiária -->
+      <div class="drawer-section">
+        <div class="drawer-section-title">Perfil da Beneficiária</div>
+        <div class="drawer-grid">
+          <div class="drawer-item full-width">
+            <span class="drawer-label">Nome Completo</span>
+            <div class="confidential-wrapper">
+              <span class="confidential-data blurred" style="font-size: 1.05rem; font-weight: 600;">${p.beneficiaria.nome}</span>
+              <button class="btn-toggle-sigilo" onclick="toggleSigilo(this)" style="font-size: 0.75rem; padding: 2px 6px;">Exibir</button>
+            </div>
+          </div>
+          <div class="drawer-item">
+            <span class="drawer-label">CPF</span>
+            <div class="confidential-wrapper">
+              <span class="confidential-data blurred" style="font-family: monospace;">${p.beneficiaria.cpf}</span>
+              <button class="btn-toggle-sigilo" onclick="toggleSigilo(this)" style="font-size: 0.75rem; padding: 2px 4px;">Exibir</button>
+            </div>
+          </div>
+          <div class="drawer-item">
+            <span class="drawer-label">NIS CadÚnico</span>
+            <span class="drawer-value">${p.beneficiaria.nisCadunico}</span>
+          </div>
+          <div class="drawer-item">
+            <span class="drawer-label">Renda Per Capita</span>
+            <span class="drawer-value" style="font-weight:700; color: var(--success);">R$ ${p.beneficiaria.rendaPerCapitaDigitada.toFixed(2)}</span>
+          </div>
+          <div class="drawer-item">
+            <span class="drawer-label">Contato</span>
+            <span class="drawer-value">${p.beneficiaria.telefone}</span>
+          </div>
+          <div class="drawer-item">
+            <span class="drawer-label">Bairro</span>
+            <span class="drawer-value">${p.beneficiaria.bairro}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dados Bancários -->
+      <div class="drawer-section">
+        <div class="drawer-section-title">Dados para Pagamento</div>
+        <div class="bank-card-mockup" style="background: linear-gradient(135deg, var(--primary), var(--primary-hover));">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div class="bank-card-chip"></div>
+            <div class="bank-card-brand">Aluguel Social</div>
+          </div>
+          <div class="bank-card-number" style="font-size: 1.15rem;">
+            AG: ${dadosBancarios.agencia} | CC: ${dadosBancarios.conta}
+          </div>
+          <div class="bank-card-row">
+            <div>
+              <div class="bank-card-label">Favorecida</div>
+              <div class="bank-card-holder">${p.beneficiaria.nome}</div>
+            </div>
+            <div style="text-align: right;">
+              <div class="bank-card-label">Banco</div>
+              <div class="bank-card-holder">${dadosBancarios.banco}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pareceres -->
+      <div class="drawer-section">
+        <div class="drawer-section-title">Histórico de Pareceres</div>
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+          <div style="background-color: var(--bg-app); border-left: 4px solid var(--primary); padding: 1rem; border-radius: 4px;">
+            <strong style="display: block; font-size: 0.8rem; text-transform: uppercase; color: var(--primary); margin-bottom: 4px;">Parecer Social (SUAS)</strong>
+            <p style="font-size: 0.9rem; font-style: italic; line-height: 1.4; margin: 0;">
+              ${p.parecerSocial ? `"${p.parecerSocial}"` : 'Sem parecer social emitido.'}
+            </p>
+          </div>
+          <div style="background-color: var(--bg-app); border-left: 4px solid var(--secondary); padding: 1rem; border-radius: 4px;">
+            <strong style="display: block; font-size: 0.8rem; text-transform: uppercase; color: var(--secondary); margin-bottom: 4px;">Parecer / Relatório Técnico</strong>
+            <p style="font-size: 0.9rem; font-style: italic; line-height: 1.4; margin: 0;">
+              ${p.parecerTecnico ? `"${p.parecerTecnico}"` : 'Sem parecer técnico adicional.'}
+            </p>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const footer = document.getElementById('drawer-actions-footer');
+    if (p.statusAtual === 'APROVADO') {
+      footer.innerHTML = `
+        <button onclick="fecharDrawerFicha()" class="px-4 py-2 bg-white border border-slate-200 text-slate-700 text-sm font-bold rounded-xl hover:bg-slate-50 transition-colors shadow-sm">Fechar</button>
+        <button class="btn-action-primary" onclick="homologarParaPagamento('${p.id}')">Homologar Pagamento</button>
+      `;
+    } else {
+      footer.innerHTML = `
+        <button onclick="fecharDrawerFicha()" class="px-4 py-2 bg-white border border-slate-200 text-slate-700 text-sm font-bold rounded-xl hover:bg-slate-50 transition-colors shadow-sm">Fechar</button>
+      `;
+    }
+
+    const overlay = document.getElementById('drawer-overlay');
+    const drawer = document.getElementById('ficha-drawer');
+    overlay.style.display = 'block';
+    setTimeout(() => {
+      overlay.classList.add('open');
+      drawer.classList.add('open');
+    }, 10);
+  }
+
+  function fecharDrawerFicha() {
+    const overlay = document.getElementById('drawer-overlay');
+    const drawer = document.getElementById('ficha-drawer');
+    
+    overlay.classList.remove('open');
+    drawer.classList.remove('open');
+    
+    setTimeout(() => {
+      overlay.style.display = 'none';
+    }, 300);
+  }
+
+  function mostrarAlerta(tipo, msg) {
+    const container = document.getElementById('gestor-alert-container');
+    if (!container) return;
+    container.innerHTML = `
+      <div class="alert alert-${tipo}">
+        <strong>${tipo === 'success' ? 'Sucesso' : 'Erro'}:</strong> ${msg}
+      </div>
+    `;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(() => { container.innerHTML = ''; }, 5000);
+  }
+
+  function calcularIdadeNum(nascStr) {
+    if (!nascStr) return 0;
+    const nasc = new Date(nascStr);
+    const hoje = new Date();
+    let idade = hoje.getFullYear() - nasc.getFullYear();
+    const m = hoje.getMonth() - nasc.getMonth();
+    if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) {
+      idade--;
+    }
+    return idade;
+  }
+
+  // --- CARREGAMENTO DE GRÁFICOS DINÂMICOS (CSS BARS UNIFICADO & YOY TABLE) ---
+  async function carregarGraficosEstatisticos() {
+    try {
+      const response = await fetch('/api/relatorios/estatisticas');
+      const data = await response.json();
+
+      // A. Cálculos de Vulnerabilidade MDS (Renda per Capita)
+      const extPobreza = dbProcessos.filter(p => p.beneficiaria.rendaPerCapitaDigitada <= 105).length;
+      const pobreza = dbProcessos.filter(p => p.beneficiaria.rendaPerCapitaDigitada > 105 && p.beneficiaria.rendaPerCapitaDigitada <= 218).length;
+      const baixaRenda = dbProcessos.filter(p => p.beneficiaria.rendaPerCapitaDigitada > 218).length;
+      const totalVulneraveis = Math.max(1, extPobreza + pobreza + baixaRenda);
+
+      const percExt = ((extPobreza / totalVulneraveis) * 100).toFixed(1);
+      const percPob = ((pobreza / totalVulneraveis) * 100).toFixed(1);
+      const percBax = ((baixaRenda / totalVulneraveis) * 100).toFixed(1);
+
+      const cVuln = document.getElementById('analytics-vulnerabilidade');
+      cVuln.innerHTML = `
+        <div style="display:flex; flex-direction:column; justify-content:space-between; min-height:120px; padding: 0.25rem 0;">
+          <div>
+            <div style="display:flex; justify-content:space-between; font-size:0.85rem; font-weight:600; margin-bottom:4px;">
+              <span style="color:#b91c1c;">Extrema Pobreza (até R$ 105)</span>
+              <span>${extPobreza} (${percExt}%)</span>
+            </div>
+            <div style="width:100%; height:10px; background:#f1f5f9; border-radius:5px; overflow:hidden;">
+              <div style="width:${percExt}%; height:100%; background:#b91c1c;"></div>
+            </div>
+          </div>
+          <div>
+            <div style="display:flex; justify-content:space-between; font-size:0.85rem; font-weight:600; margin-bottom:4px;">
+              <span style="color:#d97706;">Pobreza (R$ 105 a R$ 218)</span>
+              <span>${pobreza} (${percPob}%)</span>
+            </div>
+            <div style="width:100%; height:10px; background:#f1f5f9; border-radius:5px; overflow:hidden;">
+              <div style="width:${percPob}%; height:100%; background:#d97706;"></div>
+            </div>
+          </div>
+          <div>
+            <div style="display:flex; justify-content:space-between; font-size:0.85rem; font-weight:600; margin-bottom:4px;">
+              <span style="color:#2563eb;">Baixa Renda (acima de R$ 218)</span>
+              <span>${baixaRenda} (${percBax}%)</span>
+            </div>
+            <div style="width:100%; height:10px; background:#f1f5f9; border-radius:5px; overflow:hidden;">
+              <div style="width:${percBax}%; height:100%; background:#2563eb;"></div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // B. Cálculos de Prioridades de Proteção Especial (SUAS)
+      const idosas = dbProcessos.filter(p => calcularIdadeNum(p.beneficiaria.dataNascimento) >= 60).length;
+      const cadUnico = dbProcessos.filter(p => p.beneficiaria.nisCadunico && p.beneficiaria.nisCadunico !== 'N/A' && p.beneficiaria.nisCadunico !== '').length;
+      const jovens = dbProcessos.filter(p => calcularIdadeNum(p.beneficiaria.dataNascimento) < 30).length;
+      const totalGeral = Math.max(1, dbProcessos.length);
+
+      const cPrioridades = document.getElementById('analytics-prioridades');
+      cPrioridades.innerHTML = `
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; text-align:center;">
+          <div style="background:#fff7ed; border:1px solid #ffedd5; padding:1.25rem 1rem; border-radius:var(--radius-md); display: flex; flex-direction: column; justify-content: space-between; min-height: 120px;">
+            <span style="display:block; font-size:0.7rem; font-weight:700; color:#c2410c; text-transform:uppercase; margin-bottom:4px;">Grupo Idoso (60+)</span>
+            <strong style="font-size:1.5rem; color:#ea580c; display:block; margin: auto 0;">${idosas}</strong>
+            <span style="display:block; font-size:0.65rem; color:var(--text-muted); margin-top:2px;">${((idosas/totalGeral)*100).toFixed(1)}% do total</span>
+          </div>
+          <div style="background:#eff6ff; border:1px solid #dbeafe; padding:1.25rem 1rem; border-radius:var(--radius-md); display: flex; flex-direction: column; justify-content: space-between; min-height: 120px;">
+            <span style="display:block; font-size:0.7rem; font-weight:700; color:#1d4ed8; text-transform:uppercase; margin-bottom:4px;">NIS CadÚnico</span>
+            <strong style="font-size:1.5rem; color:#2563eb; display:block; margin: auto 0;">${cadUnico}</strong>
+            <span style="display:block; font-size:0.65rem; color:var(--text-muted); margin-top:2px;">${((cadUnico/totalGeral)*100).toFixed(1)}% integrado</span>
+          </div>
+          <div style="background:#ecfdf5; border:1px solid #d1fae5; padding:1.25rem 1rem; border-radius:var(--radius-md); display: flex; flex-direction: column; justify-content: space-between; min-height: 120px;">
+            <span style="display:block; font-size:0.7rem; font-weight:700; color:#047857; text-transform:uppercase; margin-bottom:4px;">Jovens Adultas</span>
+            <strong style="font-size:1.5rem; color:#10b981; display:block; margin: auto 0;">${jovens}</strong>
+            <span style="display:block; font-size:0.65rem; color:var(--text-muted); margin-top:2px;">Sub-30: ${((jovens/totalGeral)*100).toFixed(1)}%</span>
+          </div>
+        </div>
+      `;
+
+      // C. Explosão de Status dos Ingressos (Filtrável por Mês/Ano)
+      if (!window.selectedExplosaoPeriodo) {
+        window.selectedExplosaoPeriodo = '4-2026'; // Maio/2026 default
+      }
+      
+      const [mesStr, anoStr] = window.selectedExplosaoPeriodo.split('-');
+      const anoAtual = parseInt(anoStr, 10);
+      const mesAtualNum = parseInt(mesStr, 10);
+      const nomeMeses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+      
+      const tituloExplosao = document.getElementById('titulo-explosao-mes');
+      if (tituloExplosao) {
+        tituloExplosao.textContent = `Explosão de Status dos Ingressos (${nomeMeses[mesAtualNum]}/${anoAtual})`;
+      }
+
+      const selectExplosaoEl = document.getElementById('filtro-mes-ano-explosao');
+      if (selectExplosaoEl) {
+        selectExplosaoEl.value = window.selectedExplosaoPeriodo;
+      }
+
+      const ingressosDoMes = dbProcessos.filter(p => {
+        const d = new Date(p.dataCriacao);
+        return d.getFullYear() === anoAtual && d.getMonth() === mesAtualNum;
+      });
+
+      const statusesDoMes = {
+        'TRIAGEM': 0,
+        'ANALISE': 0,
+        'APROVADO': 0,
+        'APTO_PAGAMENTO': 0,
+        'INDEFERIDO': 0
+      };
+
+      ingressosDoMes.forEach(p => {
+        if (statusesDoMes[p.statusAtual] !== undefined) {
+          statusesDoMes[p.statusAtual]++;
+        }
+      });
+
+      const cExplosao = document.getElementById('analytics-explosao-mes');
+      if (cExplosao) {
+        cExplosao.innerHTML = '';
+        if (ingressosDoMes.length === 0) {
+          cExplosao.innerHTML = `<p style="color: var(--text-muted); text-align: center; grid-column: 1 / -1; padding: 1.5rem;">Nenhum requerimento ingressado em ${nomeMeses[mesAtualNum]}/${anoAtual} até o momento.</p>`;
+        } else {
+          const statusLabels = {
+            'TRIAGEM': { label: 'Em Triagem', bg: 'rgba(30, 58, 138, 0.08)', text: 'var(--primary)' },
+            'ANALISE': { label: 'Em Análise', bg: 'rgba(217, 119, 6, 0.08)', text: 'var(--secondary)' },
+            'APROVADO': { label: 'Aprovados', bg: 'rgba(16, 185, 129, 0.08)', text: 'var(--success)' },
+            'APTO_PAGAMENTO': { label: 'Apto Pagamento', bg: 'rgba(37, 99, 235, 0.08)', text: '#2563eb' },
+            'INDEFERIDO': { label: 'Indeferidos', bg: 'rgba(239, 68, 68, 0.08)', text: '#ef4444' }
+          };
+
+          Object.keys(statusesDoMes).forEach(st => {
+            const qtd = statusesDoMes[st];
+            const info = statusLabels[st];
+            const percent = ((qtd / Math.max(1, ingressosDoMes.length)) * 100).toFixed(0);
+            cExplosao.innerHTML += `
+              <div style="background: ${info.bg}; border: 1.5px solid rgba(0,0,0,0.03); padding: 1.25rem 1rem; border-radius: var(--radius-md); text-align: center; display: flex; flex-direction: column; justify-content: space-between; min-height: 120px;">
+                <span style="display: block; font-size: 0.75rem; font-weight: 700; color: ${info.text}; text-transform: uppercase; margin-bottom: 6px;">${info.label}</span>
+                <strong style="font-size: 1.85rem; color: ${info.text}; font-family: var(--font-title); display: block; margin: auto 0 2px 0;">${qtd}</strong>
+                <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 600;">${percent}% dos ingressos</span>
+              </div>
+            `;
+          });
+        }
+      }
+
+      // D. População da Tabela Histórica / Projeção Orçamentária Ano a Ano (Recorrente)
+      const meses = [
+        { nome: 'Janeiro', num: 0 },
+        { nome: 'Fevereiro', num: 1 },
+        { nome: 'Março', num: 2 },
+        { nome: 'Abril', num: 3 },
+        { nome: 'Maio', num: 4 },
+        { nome: 'Junho', num: 5 },
+        { nome: 'Julho', num: 6 },
+        { nome: 'Agosto', num: 7 },
+        { nome: 'Setembro', num: 8 },
+        { nome: 'Outubro', num: 9 },
+        { nome: 'Novembro', num: 10 },
+        { nome: 'Dezembro', num: 11 }
+      ];
+
+      const corpoTabela = document.getElementById('corpo-tabela-anos');
+      corpoTabela.innerHTML = '';
+      
+      const valorBaseLocal = parseFloat('<%= valorBase %>') || 600.00;
+
+      // Calcular despesas baseando-se no mês atual da data do sistema
+      const hojeSis = new Date();
+      const mesAtualSis = hojeSis.getMonth();
+
+      function calcularDiferencaMeses(d1, d2) {
+        return (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
+      }
+
+      meses.forEach(m => {
+        // Cálculo de pagamentos ativos com limite estrito de 12 meses de vigência (anos 2026, 2027, 2028)
+        const aptos2026 = dbProcessos.filter(p => {
+          if (p.statusAtual !== 'APTO_PAGAMENTO') return false;
+          const criacao = new Date(p.dataCriacao);
+          const criacaoMes = new Date(criacao.getFullYear(), criacao.getMonth(), 1);
+          const refDate = new Date(2026, m.num, 1);
+          const diff = calcularDiferencaMeses(criacaoMes, refDate);
+          return diff >= 0 && diff < 12;
+        });
+
+        const aptos2027 = dbProcessos.filter(p => {
+          if (p.statusAtual !== 'APTO_PAGAMENTO') return false;
+          const criacao = new Date(p.dataCriacao);
+          const criacaoMes = new Date(criacao.getFullYear(), criacao.getMonth(), 1);
+          const refDate = new Date(2027, m.num, 1);
+          const diff = calcularDiferencaMeses(criacaoMes, refDate);
+          return diff >= 0 && diff < 12;
+        });
+
+        const aptos2028 = dbProcessos.filter(p => {
+          if (p.statusAtual !== 'APTO_PAGAMENTO') return false;
+          const criacao = new Date(p.dataCriacao);
+          const criacaoMes = new Date(criacao.getFullYear(), criacao.getMonth(), 1);
+          const refDate = new Date(2028, m.num, 1);
+          const diff = calcularDiferencaMeses(criacaoMes, refDate);
+          return diff >= 0 && diff < 12;
+        });
+
+        let valor2026 = aptos2026.length * valorBaseLocal;
+        let valor2027 = aptos2027.length * valorBaseLocal;
+        let valor2028 = aptos2028.length * valorBaseLocal;
+
+        // Se o mês for futuro em 2026, destacar como planejado/projetado
+        const isFuturo = m.num > mesAtualSis;
+        const textoEstilo2026 = isFuturo 
+          ? `color: var(--text-muted); font-style: italic;` 
+          : `font-weight: 700; color: var(--primary);`;
+
+        const crescimento = valor2026 > 0 ? (((valor2027 - valor2026) / valor2026) * 100).toFixed(1) + '%' : '0.0%';
+        const growsUp = parseFloat(crescimento) >= 0;
+        
+        corpoTabela.innerHTML += `
+          <tr>
+            <td><strong>${m.nome}</strong></td>
+            <td class="text-right" style="${textoEstilo2026}">
+              R$ ${valor2026.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${isFuturo ? ' <span style="font-size:0.65rem; font-weight:700; text-transform:uppercase; background:#f1f5f9; padding:2px 4px; border-radius:3px;">Proj</span>' : ''}
+            </td>
+            <td class="text-right" style="color: var(--text-main); font-weight: 600;">R$ ${valor2027.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td class="text-right" style="color: var(--text-muted);">R$ ${valor2028.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td class="text-right" style="font-weight: 700; color: ${growsUp ? 'var(--success)' : 'var(--danger)'};">${growsUp ? '▲' : '▼'} ${crescimento}</td>
+          </tr>
+        `;
+      });
+
+      // E. Idades
+      const cIdades = document.getElementById('chart-idades');
+      cIdades.innerHTML = '';
+      if (!data.distribuicaoIdade || data.distribuicaoIdade.length === 0) {
+        cIdades.innerHTML = '<p style="color: var(--text-muted); text-align: center;">Sem dados demográficos.</p>';
+      } else {
+        const maxIdade = Math.max(...data.distribuicaoIdade.map(i => i.quantidade));
+        data.distribuicaoIdade.forEach(i => {
+          const perc = maxIdade > 0 ? (i.quantidade / maxIdade) * 100 : 0;
+          cIdades.innerHTML += `
+            <div class="bar-row" style="display: flex; align-items: center; gap: 1rem;">
+              <span style="font-size: 0.85rem; width: 120px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${i.faixa}</span>
+              <div style="flex-grow: 1; height: 12px; background: #e2e8f0; border-radius: 6px; overflow: hidden;">
+                <div style="width: ${perc}%; height: 100%; background: var(--secondary); transition: width 0.5s ease;"></div>
+              </div>
+              <span style="font-size: 0.85rem; font-weight: 600; width: 30px; text-align: right;">${i.quantidade}</span>
+            </div>
+          `;
+        });
+      }
+
+      // F. Esteiras
+      const cEsteiras = document.getElementById('chart-esteiras');
+      cEsteiras.innerHTML = '';
+      if (!data.distribuicaoEsteira || data.distribuicaoEsteira.length === 0) {
+        cEsteiras.innerHTML = '<p style="color: var(--text-muted); text-align: center;">Sem dados de esteira.</p>';
+      } else {
+        const maxEsteira = Math.max(...data.distribuicaoEsteira.map(e => e.quantidade));
+        data.distribuicaoEsteira.forEach(e => {
+          const perc = maxEsteira > 0 ? (e.quantidade / maxEsteira) * 100 : 0;
+          cEsteiras.innerHTML += `
+            <div class="bar-row" style="display: flex; align-items: center; gap: 1rem;">
+              <span style="font-size: 0.85rem; width: 120px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${e.esteira}</span>
+              <div style="flex-grow: 1; height: 12px; background: #e2e8f0; border-radius: 6px; overflow: hidden;">
+                <div style="width: ${perc}%; height: 100%; background: var(--primary); transition: width 0.5s ease;"></div>
+              </div>
+              <span style="font-size: 0.85rem; font-weight: 600; width: 30px; text-align: right;">${e.quantidade}</span>
+            </div>
+          `;
+        });
+      }
+
+      // G. Evolução Mensal de Novos Requerimentos (Filtrável por Ano)
+      if (!window.selectedEvolucaoAno) {
+        window.selectedEvolucaoAno = '2026';
+      }
+
+      const selectEvolucaoEl = document.getElementById('filtro-ano-evolucao');
+      if (selectEvolucaoEl) {
+        selectEvolucaoEl.value = window.selectedEvolucaoAno;
+      }
+
+      const anoEvolucao = parseInt(window.selectedEvolucaoAno, 10);
+      const mesesOrdenados = [];
+      for (let m = 0; m < 12; m++) {
+        mesesOrdenados.push({
+          label: nomeMeses[m].substring(0,3) + '/' + anoEvolucao,
+          num: m,
+          ano: anoEvolucao
+        });
+      }
+
+      const cMensal = document.getElementById('chart-mensal');
+      cMensal.innerHTML = '';
+
+      let maxCount = 0;
+      const dadosGrafico = mesesOrdenados.map(m => {
+        const doMes = dbProcessos.filter(p => {
+          const d = new Date(p.dataCriacao);
+          return d.getFullYear() === m.ano && d.getMonth() === m.num;
+        });
+        const solicitados = doMes.length;
+        const aprovados = doMes.filter(p => ['APROVADO', 'APTO_PAGAMENTO'].includes(p.statusAtual)).length;
+
+        if (solicitados > maxCount) maxCount = solicitados;
+        return { label: m.label, solicitados, aprovados };
+      });
+
+      dadosGrafico.forEach(d => {
+        const percSol = maxCount > 0 ? (d.solicitados / maxCount) * 100 : 0;
+        const percApr = maxCount > 0 ? (d.aprovados / maxCount) * 100 : 0;
+
+        cMensal.innerHTML += `
+          <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.85rem;">
+            <span style="font-size: 0.85rem; width: 90px; font-weight: 600; color: var(--text-main);">${d.label}</span>
+            <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 4px;">
+              <!-- Solicitados (Azul MDS) -->
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <div style="flex-grow: 1; height: 10px; background: #e2e8f0; border-radius: 5px; overflow: hidden;">
+                  <div style="width: ${percSol}%; height: 100%; background: var(--primary); transition: width 0.5s;"></div>
+                </div>
+                <span style="font-size: 0.75rem; font-weight: 700; color: var(--primary); width: 60px;">${d.solicitados} Solic.</span>
+              </div>
+              <!-- Aprovados (Verde SUAS) -->
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <div style="flex-grow: 1; height: 10px; background: #e2e8f0; border-radius: 5px; overflow: hidden;">
+                  <div style="width: ${percApr}%; height: 100%; background: var(--success); transition: width 0.5s;"></div>
+                </div>
+                <span style="font-size: 0.75rem; font-weight: 700; color: var(--success); width: 60px;">${d.aprovados} Aprov.</span>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      // H. Alertas de Renovação Pendente (≤ 60 dias para completar 12 meses)
+      const cRenovacao = document.getElementById('alertas-renovacao-container');
+      const corpoTabelaRenovacao = document.getElementById('corpo-tabela-renovacao');
+      const bubbleCountRenovacao = document.getElementById('count-renovacao');
+      
+      const hoje = new Date();
+      const expirando = dbProcessos.filter(p => {
+        if (p.statusAtual !== 'APTO_PAGAMENTO') return false;
+        const criacao = new Date(p.dataCriacao);
+        
+        // Fim da vigência de 12 meses
+        const dataFim = new Date(criacao);
+        dataFim.setMonth(dataFim.getMonth() + 12);
+        
+        const diffMs = dataFim - hoje;
+        const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+        
+        // Expira nos próximos 60 dias
+        return diffDays > 0 && diffDays <= 60;
+      });
+
+      // Atualiza a bolha de contagem na aba superior
+      if (bubbleCountRenovacao) {
+        bubbleCountRenovacao.textContent = expirando.length;
+      }
+
+      // Popula a barra lateral resumida no Painel Geral
+      if (cRenovacao) {
+        if (expirando.length === 0) {
+          cRenovacao.innerHTML = `
+            <p style="color: var(--text-muted); font-size: 0.85rem; font-style: italic; text-align: center; margin: 0; padding: 0.75rem;">
+              Nenhum benefício requer renovação nos próximos 60 dias.
+            </p>
+          `;
+        } else {
+          cRenovacao.innerHTML = '';
+          expirando.forEach(p => {
+            const criacao = new Date(p.dataCriacao);
+            const dataFim = new Date(criacao);
+            dataFim.setMonth(dataFim.getMonth() + 12);
+            const diffMs = dataFim - hoje;
+            const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+            cRenovacao.innerHTML += `
+              <div style="background-color: #fffbeb; border: 1px solid #fef3c7; border-left: 4px solid #d97706; padding: 0.75rem; border-radius: 4px; display: flex; flex-direction: column; gap: 4px; text-align: left;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap: 1rem;">
+                  <strong style="font-size: 0.85rem; color: #b45309; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${p.beneficiaria.nome}</strong>
+                  <span style="font-size: 0.7rem; font-weight:700; background:#fef3c7; color:#b45309; padding:2px 6px; border-radius:3px; white-space: nowrap;">
+                    ${diffDays} dias rest.
+                  </span>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size: 0.75rem; color: var(--text-muted);">
+                  <span>SEI: ${p.numeroProcessoSei}</span>
+                  <span>Expira: ${dataFim.toLocaleDateString('pt-BR')}</span>
+                </div>
+              </div>
+            `;
+          });
+        }
+      }
+
+      // Popula a tabela detalhada na nova subaba dedicada
+      if (corpoTabelaRenovacao) {
+        if (expirando.length === 0) {
+          corpoTabelaRenovacao.innerHTML = `
+            <tr>
+              <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+                Nenhum benefício ativo requer renovação nos próximos 60 dias.
+              </td>
+            </tr>
+          `;
+        } else {
+          corpoTabelaRenovacao.innerHTML = '';
+          expirando.forEach(p => {
+            const criacao = new Date(p.dataCriacao);
+            const dataFim = new Date(criacao);
+            dataFim.setMonth(dataFim.getMonth() + 12);
+            const diffMs = dataFim - hoje;
+            const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+            corpoTabelaRenovacao.innerHTML += `
+              <tr class="homologacao-row" style="cursor: pointer;" onclick="abrirDrawerFicha('${p.id}')">
+                <td><strong>${p.numeroProcessoSei}</strong></td>
+                <td>
+                  <div class="confidential-wrapper" onclick="event.stopPropagation();">
+                    <span class="confidential-data blurred">${p.beneficiaria.nome} (${p.beneficiaria.cpf})</span>
+                    <button class="btn-toggle-sigilo" onclick="toggleSigilo(this)" title="Exibir/Ocultar Dados">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                      Exibir
+                    </button>
+                  </div>
+                </td>
+                <td>${criacao.toLocaleDateString('pt-BR')}</td>
+                <td><strong class="text-danger">${dataFim.toLocaleDateString('pt-BR')}</strong></td>
+                <td>
+                  <span class="sla-badge red" style="font-weight: 700;">
+                    ${diffDays} dias restantes
+                  </span>
+                </td>
+                <td class="text-right" onclick="event.stopPropagation();">
+                  <button class="btn-action-primary" onclick="abrirDrawerFicha('${p.id}')" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;">
+                    Iniciar Renovação
+                  </button>
+                </td>
+              </tr>
+            `;
+          });
+        }
+      }
+
+    } catch (error) {
+      console.error('Estatísticas falharam:', error);
+    }
+  }
+
+  function filtrarExplosaoMesAno() {
+    const val = document.getElementById('filtro-mes-ano-explosao').value;
+    window.selectedExplosaoPeriodo = val;
+    carregarGraficosEstatisticos();
+  }
+
+  function filtrarEvolucaoAno() {
+    const val = document.getElementById('filtro-ano-evolucao').value;
+    window.selectedEvolucaoAno = val;
+    carregarGraficosEstatisticos();
+  }
+
+  // --- EXPORTAR PLANILHA CSV ---
+  function exportarDadosFinanceiros() {
+    const table = document.getElementById('tabela-financeira-list');
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += "Processo SEI,Nome,CPF,BancoInfo,Esteira,ValorBase\n";
+    
+    const rows = table.querySelectorAll('tbody tr');
+    if (rows.length === 0) {
+      alert("Nenhum dado financeiro apto para exportar.");
+      return;
+    }
+    
+    rows.forEach(row => {
+      const cols = row.querySelectorAll('td');
+      const sei = cols[0].innerText.trim();
+      const nome = cols[1].innerText.trim();
+      const cpf = cols[2].innerText.trim();
+      const dadosBancarios = cols[3].innerText.replace(/,/g, '|').trim();
+      const esteira = cols[4].innerText.trim();
+      const valor = cols[5].innerText.replace("R$ ", "").trim();
+      
+      csvContent += `"${sei}","${nome}","${cpf}","${dadosBancarios}","${esteira}","${valor}"\n`;
+    });
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `folha_pagamento_${new Date().toISOString().substring(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  // Explicit window bindings
+  window.abrirDrawerFicha = abrirDrawerFicha;
+  window.fecharDrawerFicha = fecharDrawerFicha;
+  window.switchGestorTab = switchGestorTab;
+  window.filtrarAuditoria = filtrarAuditoria;
+  window.pagAuditoriaAnt = pagAuditoriaAnt;
+  window.pagAuditoriaProx = pagAuditoriaProx;
+  window.alterarLimiteAuditoria = alterarLimiteAuditoria;
+  
+  window.filtrarHomologacao = filtrarHomologacao;
+  window.pagHomologacaoAnt = pagHomologacaoAnt;
+  window.pagHomologacaoProx = pagHomologacaoProx;
+  window.alterarLimiteHomologacao = alterarLimiteHomologacao;
+  window.homologarParaPagamento = homologarParaPagamento;
+  window.exportarDadosFinanceiros = exportarDadosFinanceiros;
+  window.filtrarExplosaoMesAno = filtrarExplosaoMesAno;
+  window.filtrarEvolucaoAno = filtrarEvolucaoAno;
+</script>
+
+<%- include('../partials/footer') %>

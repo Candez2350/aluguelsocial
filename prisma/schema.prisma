@@ -1,0 +1,67 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Usuario {
+  id                    String            @id @default(uuid())
+  nome                  String
+  email                 String            @unique
+  senhaHash             String
+  role                  String            // 'ADMIN', 'OPERADOR_ENTRADA', 'ANALISTA_SEDSODH', 'ASSISTENTE_SOCIAL_SUAS', 'GESTOR_SEMPI'
+  dataCriacao           DateTime          @default(now())
+  processosResponsaveis ProcessoAuxilio[]
+}
+
+model Configuracao {
+  id    String @id @default(uuid())
+  chave String @unique
+  valor String
+}
+
+model Beneficiaria {
+  id                       String            @id @default(uuid())
+  nome                     String
+  cpf                      String            @unique
+  nisCadunico              String
+  rendaPerCapitaDigitada   Float
+  dadosBancariosManuais    String            // JSON em formato texto
+  apiOrigemDados           Boolean           @default(false)
+  bairro                   String
+  cidade                   String
+  dataNascimento           DateTime
+  telefone                 String
+  dataCriacao              DateTime          @default(now())
+  processos                ProcessoAuxilio[]
+}
+
+model ProcessoAuxilio {
+  id                    String               @id @default(uuid())
+  numeroProcessoSei     String               @unique
+  beneficiariaId        String
+  beneficiaria          Beneficiaria         @relation(fields: [beneficiariaId], references: [id], onDelete: Cascade)
+  tipoEsteira           String               // 'SIMPLIFICADO', 'COMUM'
+  statusAtual           String               // 'RASCUNHO', 'TRIAGEM', 'ANALISE', 'APROVADO', 'INDEFERIDO', 'RECURSO', 'APTO_PAGAMENTO', 'SUSPENSO', 'ENCERRADO'
+  dataCriacao           DateTime             @default(now())
+  dataLimiteAnalise     DateTime
+  operadorResponsavelId String
+  operadorResponsavel   Usuario              @relation(fields: [operadorResponsavelId], references: [id])
+  parecerSocial         String?              // Parecer social do Assistente Social
+  parecerTecnico        String?              // Parecer técnico descritivo do Assistente Social
+  documentos            DocumentoChecklist[]
+}
+
+model DocumentoChecklist {
+  id                    String          @id @default(uuid())
+  processoId            String
+  processo              ProcessoAuxilio @relation(fields: [processoId], references: [id], onDelete: Cascade)
+  tipoDocumento         String          // 'RG', 'CPF', 'COMPROVANTE_RESIDENCIA', 'MPU', 'CADUNICO'
+  arquivoStorageUrl     String
+  verificadoManualmente Boolean         @default(false)
+  ocrProcessado         Boolean         @default(false)
+  dataCriacao           DateTime        @default(now())
+}

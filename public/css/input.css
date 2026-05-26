@@ -1,0 +1,43 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface-50 text-slate-800 font-sans antialiased selection:bg-gov-500 selection:text-white;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display tracking-tight text-gov-950;
+  }
+}
+
+@layer components {
+  /* Utilitário para Glassmorphism */
+  .glass-panel {
+    @apply bg-white/80 backdrop-blur-glass border border-white/60 shadow-glass;
+  }
+  
+  .glass-panel-hover {
+    @apply hover:-translate-y-1 hover:shadow-premium-hover hover:border-white/85 transition-all duration-300;
+  }
+  
+  .btn-primary {
+    @apply inline-flex items-center justify-center px-4 py-2 bg-gradient-to-br from-gov-900 to-gov-500 text-white font-medium rounded-xl 
+           hover:from-gov-700 hover:to-blue-600 transition-all duration-200 shadow-sm hover:shadow-premium active:scale-95 border-none cursor-pointer;
+  }
+}
+
+/* Scrollbar Customizada */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 rounded-full hover:bg-slate-400 transition-colors;
+}

@@ -1,0 +1,22 @@
+# Dependências
+node_modules/
+
+# Configurações Privadas (Segurança)
+.env
+.env.local
+
+# Banco de Dados Local SQLite
+prisma/dev.db
+prisma/dev.db-journal
+
+# Temporários do Sistema / IDEs
+.DS_Store
+.vscode/
+.idea/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Compilações e Builds
+dist/
+build/

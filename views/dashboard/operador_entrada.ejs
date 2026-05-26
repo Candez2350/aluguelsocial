@@ -1,0 +1,758 @@
+<%- include('../partials/header') %>
+
+<div id="operador-alert-container"></div>
+
+<!-- Cabeçalho da Fila de Trabalho do Operador -->
+<div class="mb-8 p-6 bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+  <div>
+    <h1 class="text-xl font-display font-bold text-slate-800">Fila de Entrada e Triagem</h1>
+    <p class="text-sm text-slate-500 mt-1 font-medium">Cadastre novos requerimentos e gerencie documentos obrigatórios das esteiras comuns e simplificadas.</p>
+  </div>
+  <button onclick="abrirCadastroModal()" class="btn-primary py-2.5 px-5 text-sm font-semibold uppercase tracking-wider flex items-center gap-2 shadow-sm rounded-lg" style="width: auto;">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+    Novo Requerimento
+  </button>
+</div>
+
+<!-- Barra de Ações e Filtro Rápido -->
+<div class="controls-row mb-6">
+  <div style="flex-grow: 1;"></div>
+  <div class="search-container min-w-[300px]">
+    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="11" cy="11" r="8"></circle>
+      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+    </svg>
+    <input type="text" id="search-input" class="search-input" placeholder="Filtrar por Processo SEI, Cidadã ou CPF..." onkeyup="filterTable()">
+  </div>
+</div>
+
+<!-- Tabela de Processos (Full-Width) -->
+<div class="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden flex flex-col mb-8">
+  <div class="px-6 py-5 border-b border-slate-100 bg-slate-50/50">
+    <h2 class="text-gov-900 font-display font-bold text-lg">Processos Inseridos recentemente</h2>
+  </div>
+  
+  <div class="overflow-x-auto">
+    <table class="w-full text-left border-collapse" id="table-processos">
+      <thead>
+        <tr class="bg-slate-50 text-slate-500 font-semibold text-xs tracking-wider uppercase border-b border-slate-200">
+          <th class="px-6 py-4">Processo SEI</th>
+          <th class="px-6 py-4">Cidadã (CPF)</th>
+          <th class="px-6 py-4">Esteira</th>
+          <th class="px-6 py-4">Status</th>
+          <th class="px-6 py-4 text-right">Ações</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        <% if (processos.length === 0) { %>
+          <tr class="no-process-row">
+            <td colspan="5" class="text-center text-slate-500 py-12 text-sm">Nenhum processo cadastrado no momento.</td>
+          </tr>
+        <% } else { %>
+          <% processos.forEach(p => { %>
+            <tr class="processo-row group hover:bg-slate-50 cursor-pointer transition-colors text-sm" 
+                data-id="<%= p.id %>"
+                data-sei="<%= p.numeroProcessoSei %>" 
+                data-nome="<%= p.beneficiaria.nome %>" 
+                data-cpf="<%= p.beneficiaria.cpf %>"
+                data-status="<%= p.statusAtual %>">
+              <td class="px-6 py-4 font-semibold text-slate-900"><%= p.numeroProcessoSei %></td>
+              <td class="px-6 py-4">
+                <div class="confidential-wrapper flex items-center gap-1.5" onclick="event.stopPropagation();">
+                  <span class="confidential-data blurred select-none text-slate-700"><%= p.beneficiaria.nome %> (<%= p.beneficiaria.cpf %>)</span>
+                  <button class="text-gov-500 hover:text-gov-700 text-[10px] font-bold px-2 py-0.5 rounded border border-slate-200 bg-white btn-toggle-sigilo" onclick="toggleSigilo(this)">Exibir</button>
+                </div>
+              </td>
+              <td class="px-6 py-4">
+                <span class="esteira-tag <%= p.tipoEsteira.toLowerCase() %>">
+                  <%= p.tipoEsteira %>
+                </span>
+              </td>
+              <td class="px-6 py-4">
+                <span class="status-tag <%= p.statusAtual.toLowerCase() %> text-[10px] px-2 py-1 rounded font-bold uppercase tracking-wide border border-slate-100">
+                  <%= p.statusAtual.replace('_', ' ') %>
+                </span>
+              </td>
+              <td class="px-6 py-4 text-right" onclick="event.stopPropagation();">
+                <div class="action-btn-group flex gap-2 justify-end">
+                  <button class="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50" onclick="abrirChecklistModal('<%= p.id %>')" title="Gerenciar Documentos">Checklist</button>
+                  
+                  <% 
+                    const statusPermitidosEdicao = ['RASCUNHO', 'RECURSO', 'SUSPENSO', 'TRIAGEM'];
+                    if (statusPermitidosEdicao.includes(p.statusAtual)) { 
+                  %>
+                    <button class="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50" onclick="abrirEdicaoModal('<%= p.id %>')" title="Editar dados">Editar</button>
+                  <% } %>
+
+                  <% if (p.statusAtual === 'RASCUNHO') { %>
+                    <button class="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-gov-700 text-white hover:bg-gov-800 transition-colors" onclick="avancarStatus('<%= p.id %>', 'TRIAGEM')" title="Enviar para Triagem">Triar</button>
+                  <% } else if (p.statusAtual === 'TRIAGEM') { %>
+                    <button class="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-gov-700 text-white hover:bg-gov-800 transition-colors" onclick="avancarStatus('<%= p.id %>', 'ANALISE')" title="Enviar para Análise">Análise</button>
+                  <% } %>
+                </div>
+              </td>
+            </tr>
+          <% }) %>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Paginação para Processos Cadastrados -->
+  <div class="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between gap-4 text-xs">
+    <div class="flex items-center gap-2 text-slate-600 font-medium">
+      <select id="limit-table-processos" class="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-700 outline-none focus:border-gov-500" onchange="changeLimit('table-processos')">
+        <option value="5" selected>5</option>
+        <option value="10">10</option>
+        <option value="15">15</option>
+      </select>
+    </div>
+    <div id="info-table-processos" class="text-slate-500 font-medium">
+      Exibindo 1 a 5 de 15 registros
+    </div>
+    <div class="flex items-center gap-1">
+      <button id="btn-prev-table-processos" class="px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed" onclick="prevPage('table-processos')">Ant.</button>
+      <button id="btn-next-table-processos" class="px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed" onclick="nextPage('table-processos')">Próx.</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Novo Requerimento (Cadastro) -->
+<div id="cadastro-modal" class="modal-overlay">
+  <div class="modal-card" style="max-width: 800px;">
+    <div class="modal-header">
+      <h2 class="modal-title">Cadastrar Novo Requerimento</h2>
+      <button class="modal-close" type="button" onclick="fecharCadastroModal()">&times;</button>
+    </div>
+    <form id="form-cadastro" onsubmit="cadastrarInscricao(event)">
+      <div class="modal-body">
+        
+        <h3 class="text-xs font-bold text-gov-700 uppercase tracking-wider mb-4 pb-2 border-b border-slate-100">Dados Pessoais</h3>
+        
+        <div class="form-group mb-4">
+          <label for="ben-nome" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">Nome Completo</label>
+          <input type="text" id="ben-nome" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required placeholder="Ex: Antônia Maria de Jesus">
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div class="form-group">
+            <label for="ben-cpf" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">CPF</label>
+            <input type="text" id="ben-cpf" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required placeholder="000.000.000-00" oninput="mascaraCPF(this)">
+          </div>
+          <div class="form-group">
+            <label for="ben-nis" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">NIS CadÚnico</label>
+            <input type="text" id="ben-nis" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required placeholder="Ex: 12345678901">
+          </div>
+          <div class="form-group">
+            <label for="ben-nascimento" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">Data de Nascimento</label>
+            <input type="date" id="ben-nascimento" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required>
+          </div>
+          <div class="form-group">
+            <label for="ben-telefone" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">Telefone de Contato</label>
+            <input type="text" id="ben-telefone" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required placeholder="(00) 00000-0000">
+          </div>
+        </div>
+
+        <h3 class="text-xs font-bold text-gov-700 uppercase tracking-wider mb-4 pb-2 border-b border-slate-100">Renda e Residência</h3>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div class="form-group">
+            <label for="ben-renda" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">Renda Per Capita (R$)</label>
+            <input type="number" step="0.01" min="0" id="ben-renda" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required placeholder="Ex: 180.00">
+          </div>
+          <div class="form-group">
+            <label for="ben-bairro" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">Bairro</label>
+            <input type="text" id="ben-bairro" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required placeholder="Ex: Madureira">
+          </div>
+          <div class="form-group">
+            <label for="ben-cidade" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">Cidade</label>
+            <input type="text" id="ben-cidade" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required placeholder="Ex: Rio de Janeiro" value="Rio de Janeiro">
+          </div>
+        </div>
+
+        <h3 class="text-xs font-bold text-gov-700 uppercase tracking-wider mb-4 pb-2 border-b border-slate-100">Conta para Depósito</h3>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div class="form-group">
+            <label for="ben-banco" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">Banco (Código)</label>
+            <input type="text" id="ben-banco" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required placeholder="Ex: 001">
+          </div>
+          <div class="form-group">
+            <label for="ben-agencia" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">Agência</label>
+            <input type="text" id="ben-agencia" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required placeholder="Ex: 1234">
+          </div>
+          <div class="form-group">
+            <label for="ben-conta" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">Conta / DV</label>
+            <input type="text" id="ben-conta" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required placeholder="Ex: 56789-0">
+          </div>
+        </div>
+
+        <h3 class="text-xs font-bold text-gov-700 uppercase tracking-wider mb-4 pb-2 border-b border-slate-100">Dados Administrativos</h3>
+        
+        <div class="form-group mb-4">
+          <label for="sei-processo" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">Número do Processo SEI</label>
+          <input type="text" id="sei-processo" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required placeholder="Ex: SEI-12345/2026">
+        </div>
+
+        <div class="flex items-center gap-3 p-4 rounded-xl border border-slate-200 bg-slate-50/50">
+          <input type="checkbox" id="tem-mpu" name="temMPU" class="w-4 h-4 text-gov-600 border-slate-300 rounded focus:ring-gov-500 cursor-pointer">
+          <label for="tem-mpu" class="text-xs text-slate-700 font-semibold cursor-pointer">
+            Cidadã possui Medida Protetiva de Urgência (MPU)?
+            <span class="block font-normal text-[11px] text-slate-500 mt-1">Marcar esta opção ativa automaticamente a esteira Judicial Simplificada (SLA de 72h).</span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" onclick="fecharCadastroModal()" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary" style="width: auto;">Cadastrar Requerimento</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal Edição de Inscrição Existente -->
+<div id="edicao-modal" class="modal-overlay">
+  <div class="modal-card" style="max-width: 800px;">
+    <div class="modal-header">
+      <h2 class="modal-title">Editar Inscrição de Auxílio</h2>
+      <button class="modal-close" type="button" onclick="fecharEdicaoModal()">&times;</button>
+    </div>
+    <form id="form-edicao" onsubmit="editarInscricao(event)">
+      <div class="modal-body">
+        <input type="hidden" id="edit-id">
+        
+        <h3 class="text-xs font-bold text-gov-700 uppercase tracking-wider mb-4 pb-2 border-b border-slate-100">Dados Pessoais</h3>
+        
+        <div class="form-group mb-4">
+          <label for="edit-nome" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">Nome Completo</label>
+          <input type="text" id="edit-nome" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required placeholder="Ex: Antônia Maria de Jesus">
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div class="form-group">
+            <label for="edit-cpf" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">CPF</label>
+            <input type="text" id="edit-cpf" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required placeholder="000.000.000-00" oninput="mascaraCPF(this)">
+          </div>
+          <div class="form-group">
+            <label for="edit-nis" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">NIS CadÚnico</label>
+            <input type="text" id="edit-nis" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required placeholder="Ex: 12345678901">
+          </div>
+          <div class="form-group">
+            <label for="edit-nascimento" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">Data de Nascimento</label>
+            <input type="date" id="edit-nascimento" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required>
+          </div>
+          <div class="form-group">
+            <label for="edit-telefone" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">Telefone de Contato</label>
+            <input type="text" id="edit-telefone" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required placeholder="(00) 00000-0000">
+          </div>
+        </div>
+
+        <h3 class="text-xs font-bold text-gov-700 uppercase tracking-wider mb-4 pb-2 border-b border-slate-100">Renda e Residência</h3>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div class="form-group">
+            <label for="edit-renda" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">Renda Per Capita (R$)</label>
+            <input type="number" step="0.01" min="0" id="edit-renda" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required placeholder="Ex: 180.00">
+          </div>
+          <div class="form-group">
+            <label for="edit-bairro" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">Bairro</label>
+            <input type="text" id="edit-bairro" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required placeholder="Ex: Madureira">
+          </div>
+          <div class="form-group">
+            <label for="edit-cidade" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">Cidade</label>
+            <input type="text" id="edit-cidade" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required placeholder="Ex: Rio de Janeiro" value="Rio de Janeiro">
+          </div>
+        </div>
+
+        <h3 class="text-xs font-bold text-gov-700 uppercase tracking-wider mb-4 pb-2 border-b border-slate-100">Conta para Depósito</h3>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div class="form-group">
+            <label for="edit-banco" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">Banco (Código)</label>
+            <input type="text" id="edit-banco" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required placeholder="Ex: 001">
+          </div>
+          <div class="form-group">
+            <label for="edit-agencia" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">Agência</label>
+            <input type="text" id="edit-agencia" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required placeholder="Ex: 1234">
+          </div>
+          <div class="form-group">
+            <label for="edit-conta" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">Conta / DV</label>
+            <input type="text" id="edit-conta" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required placeholder="Ex: 56789-0">
+          </div>
+        </div>
+
+        <h3 class="text-xs font-bold text-gov-700 uppercase tracking-wider mb-4 pb-2 border-b border-slate-100">Dados Administrativos</h3>
+        
+        <div class="form-group mb-4">
+          <label for="edit-sei-processo" class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">Número do Processo SEI</label>
+          <input type="text" id="edit-sei-processo" class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-gov-500 focus:ring-4 focus:ring-gov-500/10 transition-all shadow-sm" required placeholder="Ex: SEI-12345/2026">
+        </div>
+
+        <div class="flex items-center gap-3 p-4 rounded-xl border border-slate-200 bg-slate-50/50">
+          <input type="checkbox" id="edit-tem-mpu" name="temMPU" class="w-4 h-4 text-gov-600 border-slate-300 rounded focus:ring-gov-500 cursor-pointer">
+          <label for="edit-tem-mpu" class="text-xs text-slate-700 font-semibold cursor-pointer">
+            Cidadã possui Medida Protetiva de Urgência (MPU)?
+            <span class="block font-normal text-[11px] text-slate-500 mt-1">Marcar esta opção ativa automaticamente a esteira Judicial Simplificada (SLA de 72h).</span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" onclick="fecharEdicaoModal()" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary" style="width: auto;">Salvar Alterações</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal Checklist Flutuante -->
+<div id="checklist-modal" class="modal-overlay">
+  <div class="modal-card" style="max-width: 600px;">
+    <div class="modal-header">
+      <h2 class="modal-title">Documentos Obrigatórios - SEI: <span id="modal-sei-num"></span></h2>
+      <button class="modal-close" type="button" onclick="fecharChecklistModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="modal-checklist-docs" class="checklist-container">
+        <!-- preenchido por js -->
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" onclick="fecharChecklistModal()" class="btn-secondary">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Oculto: Serialização dos Processos em JSON para leitura segura no Client-Side -->
+<textarea id="processos-json-data" style="display: none;"><%- JSON.stringify(processos) %></textarea>
+
+<script>
+  // Helper for masking CPF
+  function mascaraCPF(i) {
+    let v = i.value;
+    if (isNaN(v.charAt(v.length-1))) {
+      i.value = v.substring(0, v.length-1);
+      return;
+    }
+    i.setAttribute("maxlength", "14");
+    if (v.length == 3 || v.length == 7) i.value += ".";
+    if (v.length == 11) i.value += "-";
+  }
+
+  // Estado da paginação
+  const paginasAtuais = {
+    'table-processos': 1
+  };
+  const limitesAtuais = {
+    'table-processos': 5
+  };
+
+  // Aplica paginação em uma tabela específica
+  function aplicarPaginacao(tableId) {
+    const rows = Array.from(document.querySelectorAll(`#${tableId} tbody .processo-row`));
+    const rowsFiltradas = rows.filter(row => row.getAttribute('data-filtered-out') !== 'true');
+    const totalItens = rowsFiltradas.length;
+    const limit = limitesAtuais[tableId] || 5;
+    const totalPaginas = Math.max(1, Math.ceil(totalItens / limit));
+    
+    if (paginasAtuais[tableId] > totalPaginas) {
+      paginasAtuais[tableId] = totalPaginas;
+    }
+    if (paginasAtuais[tableId] < 1) {
+      paginasAtuais[tableId] = 1;
+    }
+    
+    const paginaAtual = paginasAtuais[tableId];
+    const startIndex = (paginaAtual - 1) * limit;
+    const endIndex = Math.min(startIndex + limit, totalItens);
+    
+    rows.forEach(row => {
+      row.style.display = 'none';
+    });
+    
+    rowsFiltradas.slice(startIndex, endIndex).forEach(row => {
+      row.style.display = '';
+    });
+    
+    const infoEl = document.getElementById(`info-${tableId}`);
+    if (infoEl) {
+      if (totalItens === 0) {
+        infoEl.textContent = 'Nenhum registro encontrado';
+      } else {
+        infoEl.textContent = `Exibindo ${startIndex + 1} a ${endIndex} de ${totalItens} registros`;
+      }
+    }
+    
+    const btnPrev = document.getElementById(`btn-prev-${tableId}`);
+    const btnNext = document.getElementById(`btn-next-${tableId}`);
+    
+    if (btnPrev) btnPrev.disabled = paginaAtual === 1;
+    if (btnNext) btnNext.disabled = paginaAtual === totalPaginas;
+  }
+  
+  function prevPage(tableId) {
+    if (paginasAtuais[tableId] > 1) {
+      paginasAtuais[tableId]--;
+      aplicarPaginacao(tableId);
+    }
+  }
+  
+  function nextPage(tableId) {
+    const rows = Array.from(document.querySelectorAll(`#${tableId} tbody .processo-row`));
+    const rowsFiltradas = rows.filter(row => row.getAttribute('data-filtered-out') !== 'true');
+    const totalItens = rowsFiltradas.length;
+    const limit = limitesAtuais[tableId] || 5;
+    const totalPaginas = Math.ceil(totalItens / limit);
+    
+    if (paginasAtuais[tableId] < totalPaginas) {
+      paginasAtuais[tableId]++;
+      aplicarPaginacao(tableId);
+    }
+  }
+  
+  function changeLimit(tableId) {
+    const select = document.getElementById(`limit-${tableId}`);
+    if (select) {
+      limitesAtuais[tableId] = parseInt(select.value, 10);
+      paginasAtuais[tableId] = 1;
+      aplicarPaginacao(tableId);
+    }
+  }
+
+  // Instant Smart Filter
+  function filterTable() {
+    const query = document.getElementById('search-input').value.toLowerCase().trim();
+    const rows = document.querySelectorAll('#table-processos tbody .processo-row');
+    
+    let visibleCount = 0;
+    
+    rows.forEach(row => {
+      const sei = row.getAttribute('data-sei').toLowerCase();
+      const nome = row.getAttribute('data-nome').toLowerCase();
+      const cpf = row.getAttribute('data-cpf').replace(/\D/g, ''); 
+      const queryClean = query.replace(/\D/g, '');
+      
+      let textMatches = false;
+      if (query === '') {
+        textMatches = true;
+      } else {
+        const queryMatchesSei = sei.includes(query);
+        const queryMatchesNome = nome.includes(query);
+        const queryMatchesCpf = cpf.includes(queryClean) || row.getAttribute('data-cpf').includes(query);
+        textMatches = queryMatchesSei || queryMatchesNome || queryMatchesCpf;
+      }
+      
+      if (textMatches) {
+        row.setAttribute('data-filtered-out', 'false');
+        visibleCount++;
+      } else {
+        row.setAttribute('data-filtered-out', 'true');
+      }
+    });
+
+    const tableBody = document.querySelector('#table-processos tbody');
+    let noMatchRow = document.getElementById('no-match-row');
+    
+    if (visibleCount === 0) {
+      if (!noMatchRow) {
+        noMatchRow = document.createElement('tr');
+        noMatchRow.id = 'no-match-row';
+        noMatchRow.innerHTML = `
+          <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+            Nenhum processo correspondente aos filtros foi encontrado.
+          </td>
+        `;
+        tableBody.appendChild(noMatchRow);
+      } else {
+        noMatchRow.style.display = '';
+      }
+      const originalNoProcess = tableBody.querySelector('.no-process-row');
+      if (originalNoProcess) {
+        originalNoProcess.style.display = 'none';
+      }
+    } else {
+      if (noMatchRow) {
+        noMatchRow.style.display = 'none';
+      }
+    }
+    
+    paginasAtuais['table-processos'] = 1;
+    aplicarPaginacao('table-processos');
+  }
+
+  function abrirCadastroModal() {
+    document.getElementById('cadastro-modal').classList.add('open');
+  }
+
+  function fecharCadastroModal() {
+    document.getElementById('cadastro-modal').classList.remove('open');
+    document.getElementById('form-cadastro').reset();
+  }
+
+  function abrirEdicaoModal(processoId) {
+    const processos = JSON.parse(document.getElementById('processos-json-data').value);
+    const p = processos.find(proc => proc.id === processoId);
+    
+    if (!p) {
+      alert('Processo não encontrado.');
+      return;
+    }
+    
+    document.getElementById('edit-id').value = p.id;
+    document.getElementById('edit-nome').value = p.beneficiaria.nome;
+    document.getElementById('edit-cpf').value = p.beneficiaria.cpf;
+    document.getElementById('edit-nis').value = p.beneficiaria.nisCadunico;
+    
+    if (p.beneficiaria.dataNascimento) {
+      document.getElementById('edit-nascimento').value = p.beneficiaria.dataNascimento.substring(0, 10);
+    }
+    
+    document.getElementById('edit-telefone').value = p.beneficiaria.telefone;
+    document.getElementById('edit-renda').value = p.beneficiaria.rendaPerCapitaDigitada;
+    document.getElementById('edit-bairro').value = p.beneficiaria.bairro;
+    document.getElementById('edit-cidade').value = p.beneficiaria.cidade;
+    
+    try {
+      const bank = JSON.parse(p.beneficiaria.dadosBancariosManuais);
+      document.getElementById('edit-banco').value = bank.banco || '';
+      document.getElementById('edit-agencia').value = bank.agencia || '';
+      document.getElementById('edit-conta').value = bank.conta || '';
+    } catch(e) {
+      document.getElementById('edit-banco').value = '';
+      document.getElementById('edit-agencia').value = '';
+      document.getElementById('edit-conta').value = '';
+    }
+    
+    document.getElementById('edit-sei-processo').value = p.numeroProcessoSei;
+    document.getElementById('edit-tem-mpu').checked = (p.tipoEsteira === 'SIMPLIFICADO');
+    
+    document.getElementById('edicao-modal').classList.add('open');
+  }
+
+  function fecharEdicaoModal() {
+    document.getElementById('edicao-modal').classList.remove('open');
+    document.getElementById('form-edicao').reset();
+  }
+
+  async function cadastrarInscricao(e) {
+    e.preventDefault();
+    
+    const body = {
+      nome: document.getElementById('ben-nome').value,
+      cpf: document.getElementById('ben-cpf').value,
+      nisCadunico: document.getElementById('ben-nis').value,
+      dataNascimento: document.getElementById('ben-nascimento').value,
+      telefone: document.getElementById('ben-telefone').value,
+      rendaPerCapitaDigitada: document.getElementById('ben-renda').value,
+      bairro: document.getElementById('ben-bairro').value,
+      cidade: document.getElementById('ben-cidade').value,
+      banco: document.getElementById('ben-banco').value,
+      agencia: document.getElementById('ben-agencia').value,
+      conta: document.getElementById('ben-conta').value,
+      numeroProcessoSei: document.getElementById('sei-processo').value,
+      temMPU: document.getElementById('tem-mpu').checked
+    };
+
+    try {
+      const response = await fetch('/api/processos', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify(body)
+      });
+      
+      const res = await response.json();
+      
+      if (res.success) {
+        window.location.reload();
+      } else {
+        mostrarAlerta('danger', res.error);
+        fecharCadastroModal();
+      }
+    } catch (error) {
+      mostrarAlerta('danger', 'Erro ao cadastrar inscrição.');
+      fecharCadastroModal();
+    }
+  }
+
+  async function editarInscricao(e) {
+    e.preventDefault();
+    
+    const id = document.getElementById('edit-id').value;
+    const body = {
+      nome: document.getElementById('edit-nome').value,
+      cpf: document.getElementById('edit-cpf').value,
+      nisCadunico: document.getElementById('edit-nis').value,
+      dataNascimento: document.getElementById('edit-nascimento').value,
+      telefone: document.getElementById('edit-telefone').value,
+      rendaPerCapitaDigitada: document.getElementById('edit-renda').value,
+      bairro: document.getElementById('edit-bairro').value,
+      cidade: document.getElementById('edit-cidade').value,
+      banco: document.getElementById('edit-banco').value,
+      agencia: document.getElementById('edit-agencia').value,
+      conta: document.getElementById('edit-conta').value,
+      numeroProcessoSei: document.getElementById('edit-sei-processo').value,
+      temMPU: document.getElementById('edit-tem-mpu').checked
+    };
+
+    try {
+      const response = await fetch(`/api/processos/${id}/editar`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+      
+      const res = await response.json();
+      
+      if (res.success) {
+        fecharEdicaoModal();
+        window.location.reload();
+      } else {
+        mostrarAlerta('danger', res.error);
+        fecharEdicaoModal();
+      }
+    } catch (error) {
+      mostrarAlerta('danger', 'Erro ao salvar alterações da inscrição.');
+      fecharEdicaoModal();
+    }
+  }
+
+  async function avancarStatus(id, status) {
+    try {
+      const response = await fetch(`/api/processos/${id}/status`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ status })
+      });
+      
+      const res = await response.json();
+      
+      if (res.success) {
+        window.location.reload();
+      } else {
+        mostrarAlerta('danger', res.error);
+      }
+    } catch (error) {
+      mostrarAlerta('danger', 'Erro ao avançar status.');
+    }
+  }
+
+  function abrirChecklistModal(processoId) {
+    const processos = JSON.parse(document.getElementById('processos-json-data').value);
+    const p = processos.find(proc => proc.id === processoId);
+    
+    if (!p) {
+      alert('Processo não encontrado.');
+      return;
+    }
+    
+    document.getElementById('modal-sei-num').textContent = p.numeroProcessoSei;
+    
+    const container = document.getElementById('modal-checklist-docs');
+    container.innerHTML = '';
+    
+    p.documentos.forEach(doc => {
+      const div = document.createElement('div');
+      div.className = 'checklist-item';
+      
+      const verificado = doc.verificadoManualmente;
+      const statusBadge = verificado 
+        ? '<span class="checklist-status-badge completo">Verificado / Salvo</span>'
+        : '<span class="checklist-status-badge pendente">Pendente</span>';
+      
+      const isEditable = (p.statusAtual !== 'ENCERRADO' && p.statusAtual !== 'SUSPENSO');
+      
+      const toggleAction = verificado
+        ? `<button class="btn-danger-outline" style="font-size:0.75rem; padding:0.4rem 0.8rem;" onclick="processarDoc('${doc.id}', false)">Remover</button>`
+        : `<button class="btn-primary" style="font-size:0.75rem; padding:0.4rem 0.8rem; width:auto;" onclick="processarDoc('${doc.id}', true)">Simular Upload & Confirmar</button>`;
+
+      div.innerHTML = `
+        <div class="checklist-info">
+          <span class="checklist-title">${doc.tipoDocumento}</span>
+          <span class="checklist-desc">${doc.tipoDocumento === 'MPU' ? 'Medida Protetiva de Urgência Judicial' : 'Documento pessoal obrigatório'}</span>
+        </div>
+        <div class="checklist-actions">
+          ${statusBadge}
+          ${isEditable ? toggleAction : ''}
+        </div>
+      `;
+      container.appendChild(div);
+    });
+    
+    document.getElementById('checklist-modal').classList.add('open');
+  }
+
+  function fecharChecklistModal() {
+    document.getElementById('checklist-modal').classList.remove('open');
+  }
+
+  async function processarDoc(docId, verificadoVal) {
+    try {
+      const response = await fetch(`/api/documentos/${docId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ verificado: verificadoVal })
+      });
+      
+      const res = await response.json();
+      if (res.success) {
+        fecharChecklistModal();
+        window.location.reload();
+      }
+    } catch (error) {
+      alert('Erro ao atualizar checklist.');
+    }
+  }
+
+  function mostrarAlerta(tipo, msg) {
+    const container = document.getElementById('operador-alert-container');
+    container.innerHTML = `
+      <div class="alert alert-${tipo}">
+        <strong>${tipo === 'success' ? 'Sucesso' : 'Erro'}:</strong> ${msg}
+      </div>
+    `;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(() => { container.innerHTML = ''; }, 5000);
+  }
+
+  // Explicit window bindings
+  window.abrirCadastroModal = abrirCadastroModal;
+  window.fecharCadastroModal = fecharCadastroModal;
+  window.abrirEdicaoModal = abrirEdicaoModal;
+  window.fecharEdicaoModal = fecharEdicaoModal;
+  window.abrirChecklistModal = abrirChecklistModal;
+  window.fecharChecklistModal = fecharChecklistModal;
+  window.processarDoc = processarDoc;
+  window.avancarStatus = avancarStatus;
+  window.mascaraCPF = mascaraCPF;
+  window.prevPage = prevPage;
+  window.nextPage = nextPage;
+  window.changeLimit = changeLimit;
+  window.filterTable = filterTable;
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const rows = document.querySelectorAll('#table-processos tbody .processo-row');
+    rows.forEach(row => {
+      row.setAttribute('data-filtered-out', 'false');
+    });
+    aplicarPaginacao('table-processos');
+
+    rows.forEach(row => {
+      row.style.cursor = 'pointer';
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.action-btn-group') || e.target.closest('.btn-toggle-sigilo')) return;
+        const id = row.getAttribute('data-id');
+        abrirChecklistModal(id);
+      });
+    });
+  });
+</script>
+
+<%- include('../partials/footer') %>

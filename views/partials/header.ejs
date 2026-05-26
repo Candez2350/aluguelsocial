@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema Auxílio Aluguel - MVP Modular</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/tailwind.css">
+</head>
+<body>
+  <div class="layout-container">
+    
+    <!-- Sidebar Modular (Injetado via partial) -->
+    <%- include('sidebar') %>
+
+    <!-- Área Principal de Conteúdo -->
+    <div class="app-main">
+      
+      <!-- Cabeçalho Superior -->
+      <header class="app-header">
+        <div class="header-title-section">
+          <% 
+            let titulo = 'Painel de Controle';
+            if (session.userRole === 'ADMIN') titulo = 'Painel Administrativo';
+            else if (session.userRole === 'OPERADOR_ENTRADA') titulo = 'Esteira de Ingressos & Triagem';
+            else if (session.userRole === 'ANALISTA_SEDSODH') titulo = 'Fila de Análise Simplificada';
+            else if (session.userRole === 'ASSISTENTE_SOCIAL_SUAS') titulo = 'Fila do Parecer Social (SUAS)';
+            else if (session.userRole === 'GESTOR_SEMPI') titulo = 'Painel de Monitoramento Estratégico';
+          %>
+          <h1><%= titulo %></h1>
+        </div>
+        
+        <div class="header-meta">
+          <span class="system-date" id="current-system-date"></span>
+          
+          <div style="display: flex; align-items: center; gap: 0.5rem; background-color: var(--primary-light); padding: 0.5rem 1rem; border-radius: var(--radius-md); border: 1px solid rgba(30, 58, 138, 0.1);">
+            <div style="width: 8px; height: 8px; background-color: var(--success); border-radius: 50%;"></div>
+            <span style="font-size: 0.8rem; font-weight: 600; color: var(--primary); text-transform: uppercase;">
+              Servidor Local Ativo
+            </span>
+          </div>
+        </div>
+      </header>
+      
+      <main class="app-content">

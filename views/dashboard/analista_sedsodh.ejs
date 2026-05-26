@@ -1,0 +1,762 @@
+<%- include('../partials/header') %>
+
+<div id="analista-alert-container"></div>
+
+<%
+  /* Filtro Estrito de Competência: apenas processos SIMPLIFICADO em status ANALISE ou RECURSO */
+  const ativos = processos.filter(p => ['ANALISE', 'RECURSO'].includes(p.statusAtual) && p.tipoEsteira === 'SIMPLIFICADO');
+  const tramitados = processos.filter(p => ['APROVADO', 'INDEFERIDO', 'APTO_PAGAMENTO', 'SUSPENSO', 'ENCERRADO'].includes(p.statusAtual) && p.tipoEsteira === 'SIMPLIFICADO');
+%>
+
+<!-- Cabeçalho da Fila de Trabalho Linear -->
+<div class="mb-8 p-6 bg-white border border-slate-200 rounded-xl shadow-sm">
+  <h1 class="text-xl font-display font-bold text-slate-800">Sua Fila de Trabalho</h1>
+  <p class="text-sm text-slate-500 mt-1 font-medium">Exibindo <%= ativos.length %> processos aguardando análise regulamentar de competência judicial/simplificada.</p>
+</div>
+
+<!-- Filtros e Barra de Ações -->
+<div class="controls-row">
+  <div class="tabs-container">
+    <button id="btn-tab-ativos" class="tab-btn active" onclick="switchTab('ativos')">
+      Processos em Aberto (<span id="count-ativos"><%= ativos.length %></span>)
+    </button>
+    <button id="btn-tab-tramitados" class="tab-btn" onclick="switchTab('tramitados')">
+      Histórico de Tramitados (<span id="count-tramitados"><%= tramitados.length %></span>)
+    </button>
+  </div>
+
+  <div class="search-container">
+    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="11" cy="11" r="8"></circle>
+      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+    </svg>
+    <input type="text" id="search-input" class="search-input" placeholder="Buscar por SEI ou Cidadã..." onkeyup="filterTable()">
+  </div>
+</div>
+
+<!-- CONTAINER DE PROCESSOS EM ABERTO -->
+<div id="tab-ativos-content" class="dashboard-grid full-width">
+  <div class="section-card">
+    <div class="section-content" style="padding: 0;">
+      <div class="table-responsive">
+        <table class="custom-table" id="table-ativos">
+          <thead>
+            <tr class="bg-slate-50 text-slate-500 font-semibold text-xs tracking-wider uppercase border-b border-slate-200">
+              <th>Processo SEI</th>
+              <th>Cidadã (CPF)</th>
+              <th>Status</th>
+              <th>SLA Restante</th>
+              <th>Alerta</th>
+              <th class="text-right">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (ativos.length === 0) { %>
+              <tr>
+                <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+                  Fila vazia! Nenhum processo pendente de julgamento no momento.
+                </td>
+              </tr>
+            <% } else { %>
+              <% ativos.forEach(p => { 
+                const agora = new Date();
+                const limite = new Date(p.dataLimiteAnalise);
+                const diffMs = limite - agora;
+                
+                let slaCor = 'green';
+                let slaTexto = 'OK';
+                let slaExibicao = '';
+                
+                const horasRestantes = Math.round(diffMs / (1000 * 60 * 60));
+                if (horasRestantes < 0) {
+                  slaCor = 'red';
+                  slaTexto = 'Atrasado';
+                  slaExibicao = `Excedido (${Math.abs(horasRestantes)}h)`;
+                } else if (horasRestantes <= 24) {
+                  slaCor = 'red';
+                  slaTexto = 'Urgente';
+                  slaExibicao = `${horasRestantes} horas`;
+                } else if (horasRestantes <= 48) {
+                  slaCor = 'yellow';
+                  slaTexto = 'Prazo Próximo';
+                  slaExibicao = `${horasRestantes} horas`;
+                } else {
+                  slaCor = 'green';
+                  slaTexto = 'OK';
+                  slaExibicao = `${horasRestantes} horas`;
+                }
+              %>
+                <tr class="processo-row" data-id="<%= p.id %>" data-sei="<%= p.numeroProcessoSei %>" data-nome="<%= p.beneficiaria.nome %>">
+                  <td><strong><%= p.numeroProcessoSei %></strong></td>
+                  <td>
+                    <div class="confidential-wrapper">
+                      <span class="confidential-data blurred"><%= p.beneficiaria.nome %> (<%= p.beneficiaria.cpf %>)</span>
+                      <button class="btn-toggle-sigilo" onclick="event.stopPropagation(); toggleSigilo(this)" title="Exibir/Ocultar Dados">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                        Exibir
+                      </button>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="status-tag <%= p.statusAtual.toLowerCase() %> px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider border border-slate-200">
+                      <%= p.statusAtual %>
+                    </span>
+                  </td>
+                  <td>
+                    <strong class="text-<%= slaCor === 'red' ? 'danger' : (slaCor === 'yellow' ? 'warning' : 'success') %>">
+                      <%= slaExibicao %>
+                    </strong>
+                  </td>
+                  <td>
+                    <span class="sla-badge <%= slaCor %> px-2 py-0.5 rounded text-[10px] font-bold uppercase">
+                      <%= slaTexto %>
+                    </span>
+                  </td>
+                  <td class="text-right">
+                    <div class="action-btn-group flex gap-2 justify-end" onclick="event.stopPropagation();">
+                      <button class="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors" onclick="openDrawer('<%= p.id %>')" title="Visualizar Ficha">Detalhes</button>
+                      <button class="btn-action-primary" onclick="julgamentoProcesso('<%= p.id %>', 'APROVADO')">Deferir</button>
+                    </div>
+                  </td>
+                </tr>
+              <% }) %>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+      <!-- Paginação para Processos em Aberto -->
+      <div class="pagination-container">
+        <div class="pagination-select-wrapper">
+          <span>Itens por página:</span>
+          <select class="pagination-select" id="limit-table-ativos" onchange="changeLimit('table-ativos')">
+            <option value="5" selected>5</option>
+            <option value="10">10</option>
+            <option value="15">15</option>
+          </select>
+        </div>
+        <div class="pagination-info" id="info-table-ativos">
+          Exibindo 1 a 5 de 15 registros
+        </div>
+        <div class="pagination-controls">
+          <button class="pagination-btn" id="btn-prev-table-ativos" onclick="prevPage('table-ativos')">Ant.</button>
+          <button class="pagination-btn" id="btn-next-table-ativos" onclick="nextPage('table-ativos')">Próx.</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CONTAINER DE HISTÓRICO DE TRAMITADOS -->
+<div id="tab-tramitados-content" class="dashboard-grid full-width" style="display: none;">
+  <div class="section-card">
+    <div class="section-content" style="padding: 0;">
+      <div class="table-responsive">
+        <table class="custom-table" id="table-tramitados">
+          <thead>
+            <tr class="bg-slate-50 text-slate-500 font-semibold text-xs tracking-wider uppercase border-b border-slate-200">
+              <th>Processo SEI</th>
+              <th>Cidadã (CPF)</th>
+              <th>Status Atual</th>
+              <th>Data Limite</th>
+              <th class="text-right">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (tramitados.length === 0) { %>
+              <tr>
+                <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+                  Nenhum processo tramitado no histórico até o momento.
+                </td>
+              </tr>
+            <% } else { %>
+              <% tramitados.forEach(p => { %>
+                <tr class="processo-row" data-id="<%= p.id %>" data-sei="<%= p.numeroProcessoSei %>" data-nome="<%= p.beneficiaria.nome %>">
+                  <td><strong><%= p.numeroProcessoSei %></strong></td>
+                  <td>
+                    <div class="confidential-wrapper">
+                      <span class="confidential-data blurred"><%= p.beneficiaria.nome %> (<%= p.beneficiaria.cpf %>)</span>
+                      <button class="btn-toggle-sigilo" onclick="event.stopPropagation(); toggleSigilo(this)" title="Exibir/Ocultar Dados">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                        Exibir
+                      </button>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="status-tag <%= p.statusAtual.toLowerCase() %> px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider border border-slate-200">
+                      <%= p.statusAtual %>
+                    </span>
+                  </td>
+                  <td><%= new Date(p.dataLimiteAnalise).toLocaleDateString('pt-BR') %></td>
+                  <td class="text-right">
+                    <div class="action-btn-group flex gap-2 justify-end" onclick="event.stopPropagation();">
+                      <button class="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors" onclick="openDrawer('<%= p.id %>')" title="Visualizar Ficha Histórica">Detalhes</button>
+                    </div>
+                  </td>
+                </tr>
+              <% }) %>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+      <!-- Paginação para Processos Tramitados -->
+      <div class="pagination-container">
+        <div class="pagination-select-wrapper">
+          <span>Itens por página:</span>
+          <select class="pagination-select" id="limit-table-tramitados" onchange="changeLimit('table-tramitados')">
+            <option value="5" selected>5</option>
+            <option value="10">10</option>
+            <option value="15">15</option>
+          </select>
+        </div>
+        <div class="pagination-info" id="info-table-tramitados">
+          Exibindo 1 a 5 de 15 registros
+        </div>
+        <div class="pagination-controls">
+          <button class="pagination-btn" id="btn-prev-table-tramitados" onclick="prevPage('table-tramitados')">Ant.</button>
+          <button class="pagination-btn" id="btn-next-table-tramitados" onclick="nextPage('table-tramitados')">Próx.</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= GAVETA LATERAL DE DETALHES (DRAWER) ================= -->
+<div id="drawer-overlay" class="drawer-overlay" onclick="closeDrawer()"></div>
+<div id="detalhes-drawer" class="drawer">
+  <div class="drawer-header">
+    <h3 class="drawer-title" id="drawer-processo-sei">Processo SEI-XXXXX</h3>
+    <button onclick="closeDrawer()" class="drawer-close">&times;</button>
+  </div>
+  
+  <div class="drawer-body" id="drawer-body-content">
+    <!-- Populado dinamicamente por JS -->
+  </div>
+  
+  <div class="drawer-footer" id="drawer-actions-footer">
+    <!-- Populado dinamicamente por JS -->
+  </div>
+</div>
+
+<!-- Modal de Justificativa de Indeferimento -->
+<div id="indeferir-modal" class="modal-overlay"
+  style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1200; align-items: center; justify-content: center; padding: 2rem;">
+  <div class="modal-card" style="width: 100%; max-width: 550px; margin-bottom: 0; animation: scaleUp 0.3s ease;">
+    <div class="modal-header" style="background: linear-gradient(135deg, var(--danger), #b91c1c);">
+      <h2 class="modal-title" style="color: white; margin: 0;">Justificativa de Indeferimento</h2>
+      <button onclick="fecharIndeferirModal()" class="modal-close">&times;</button>
+    </div>
+    <div class="modal-body" style="padding: 1.5rem;">
+      <p style="margin-bottom: 1.25rem; font-size: 0.9rem; color: var(--text-muted);">
+        <strong>Processo SEI:</strong> <span id="indeferir-sei-num" style="font-weight: 700; color: var(--text-main);"></span>
+      </p>
+
+      <form id="form-indeferir-processo" onsubmit="salvarIndeferimento(event)">
+        <input type="hidden" id="indeferir-processo-id">
+
+        <div class="form-group mb-4">
+          <label for="indeferir-motivo-texto"
+            class="block text-slate-600 font-semibold text-xs mb-2 tracking-wide uppercase">Motivo / Fundamentação do Indeferimento</label>
+          <textarea id="indeferir-motivo-texto"
+            class="w-full bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-red-500 focus:ring-4 focus:ring-red-500/10 transition-all shadow-sm"
+            style="height: 120px; resize: vertical;" required
+            placeholder="Descreva a fundamentação técnica ou legal para a recusa do benefício (ex: renda acima do limite permitido, documentação inválida após prazo de regularização...)"></textarea>
+        </div>
+
+        <div class="modal-footer"
+          style="display: flex; justify-content: flex-end; gap: 0.75rem; border-top: 1px solid var(--border-color); padding-top: 1.25rem; margin-top: 1.5rem;">
+          <button type="button" onclick="fecharIndeferirModal()" class="btn-action-neutral">Cancelar</button>
+          <button type="submit" class="btn-action-danger">
+            Confirmar Indeferimento
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<textarea id="processos-json-data" style="display: none;"><%- JSON.stringify(processos) %></textarea>
+
+<script>
+  const processos = JSON.parse(document.getElementById('processos-json-data').value);
+
+  const paginasAtuais = {
+    'table-ativos': 1,
+    'table-tramitados': 1
+  };
+  const limitesAtuais = {
+    'table-ativos': 5,
+    'table-tramitados': 5
+  };
+
+  function aplicarPaginacao(tableId) {
+    const rows = Array.from(document.querySelectorAll(`#${tableId} .processo-row`));
+    const rowsFiltradas = rows.filter(row => row.getAttribute('data-filtered-out') !== 'true');
+    const totalItens = rowsFiltradas.length;
+    const limit = limitesAtuais[tableId] || 5;
+    const totalPaginas = Math.max(1, Math.ceil(totalItens / limit));
+    
+    if (paginasAtuais[tableId] > totalPaginas) {
+      paginasAtuais[tableId] = totalPaginas;
+    }
+    if (paginasAtuais[tableId] < 1) {
+      paginasAtuais[tableId] = 1;
+    }
+    
+    const paginaAtual = paginasAtuais[tableId];
+    const startIndex = (paginaAtual - 1) * limit;
+    const endIndex = Math.min(startIndex + limit, totalItens);
+    
+    rows.forEach(row => {
+      row.style.display = 'none';
+    });
+    
+    rowsFiltradas.slice(startIndex, endIndex).forEach(row => {
+      row.style.display = '';
+    });
+    
+    const infoEl = document.getElementById(`info-${tableId}`);
+    if (infoEl) {
+      if (totalItens === 0) {
+        infoEl.textContent = 'Nenhum registro encontrado';
+      } else {
+        infoEl.textContent = `Exibindo ${startIndex + 1} a ${endIndex} de ${totalItens} registros`;
+      }
+    }
+    
+    const btnPrev = document.getElementById(`btn-prev-${tableId}`);
+    const btnNext = document.getElementById(`btn-next-${tableId}`);
+    
+    if (btnPrev) btnPrev.disabled = paginaAtual === 1;
+    if (btnNext) btnNext.disabled = paginaAtual === totalPaginas;
+  }
+  
+  function prevPage(tableId) {
+    if (paginasAtuais[tableId] > 1) {
+      paginasAtuais[tableId]--;
+      aplicarPaginacao(tableId);
+    }
+  }
+  
+  function nextPage(tableId) {
+    const rows = Array.from(document.querySelectorAll(`#${tableId} .processo-row`));
+    const rowsFiltradas = rows.filter(row => row.getAttribute('data-filtered-out') !== 'true');
+    const limit = limitesAtuais[tableId] || 5;
+    const totalPaginas = Math.ceil(rowsFiltradas.length / limit);
+    
+    if (paginasAtuais[tableId] < totalPaginas) {
+      paginasAtuais[tableId]++;
+      aplicarPaginacao(tableId);
+    }
+  }
+  
+  function changeLimit(tableId) {
+    const select = document.getElementById(`limit-${tableId}`);
+    if (select) {
+      limitesAtuais[tableId] = parseInt(select.value, 10);
+      paginasAtuais[tableId] = 1;
+      aplicarPaginacao(tableId);
+    }
+  }
+
+  function switchTab(tab) {
+    const ativosContent = document.getElementById('tab-ativos-content');
+    const tramitadosContent = document.getElementById('tab-tramitados-content');
+    const btnAtivos = document.getElementById('btn-tab-ativos');
+    const btnTramitados = document.getElementById('btn-tab-tramitados');
+    
+    if (tab === 'ativos') {
+      ativosContent.style.display = 'grid';
+      tramitadosContent.style.display = 'none';
+      btnAtivos.classList.add('active');
+      btnTramitados.classList.remove('active');
+    } else {
+      ativosContent.style.display = 'none';
+      tramitadosContent.style.display = 'grid';
+      btnAtivos.classList.remove('active');
+      btnTramitados.classList.add('active');
+    }
+    filterTable();
+  }
+
+  function filterTable() {
+    const q = document.getElementById('search-input').value.toLowerCase().trim();
+    const activeTab = document.getElementById('btn-tab-ativos').classList.contains('active') ? 'ativos' : 'tramitados';
+    const tableId = activeTab === 'ativos' ? 'table-ativos' : 'table-tramitados';
+    
+    const rows = document.querySelectorAll(`#${tableId} .processo-row`);
+    rows.forEach(row => {
+      const sei = row.getAttribute('data-sei').toLowerCase();
+      const nome = row.getAttribute('data-nome').toLowerCase();
+      
+      if (sei.includes(q) || nome.includes(q)) {
+        row.setAttribute('data-filtered-out', 'false');
+      } else {
+        row.setAttribute('data-filtered-out', 'true');
+      }
+    });
+    
+    paginasAtuais[tableId] = 1;
+    aplicarPaginacao(tableId);
+  }
+
+  function calcularIdade(dataNascStr) {
+    if (!dataNascStr) return 'N/A';
+    const nasc = new Date(dataNascStr);
+    const hoje = new Date();
+    let idade = hoje.getFullYear() - nasc.getFullYear();
+    const m = hoje.getMonth() - nasc.getMonth();
+    if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) {
+      idade--;
+    }
+    return idade + ' anos';
+  }
+
+  function openDrawer(id) {
+    const p = processos.find(proc => proc.id === id);
+    if (!p) return;
+
+    document.getElementById('drawer-processo-sei').textContent = `Processo SEI: ${p.numeroProcessoSei}`;
+
+    let dadosBancos = { banco: 'Não Informado', agencia: 'N/A', conta: 'N/A' };
+    try {
+      if (p.beneficiaria.dadosBancariosManuais) {
+        dadosBancos = JSON.parse(p.beneficiaria.dadosBancariosManuais);
+      }
+    } catch (e) {}
+
+    let parecerCardHtml = '';
+    if (p.statusAtual === 'INDEFERIDO' && p.parecerTecnico) {
+      parecerCardHtml = `
+      <div class="drawer-section">
+        <div class="drawer-section-title" style="color: var(--danger); display: flex; align-items: center; gap: 0.5rem;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color: var(--danger);">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+          Motivo da Recusa / Indeferimento
+        </div>
+        <div style="background-color: var(--danger-light); border: 1.5px solid rgba(239, 68, 68, 0.25); border-radius: var(--radius-md); padding: 1.25rem; display: flex; gap: 1rem; align-items: flex-start; box-shadow: var(--shadow-sm);">
+          <div style="flex-grow: 1;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem;">
+              <span style="font-size: 0.725rem; font-weight: 700; color: #b91c1c; text-transform: uppercase; letter-spacing: 0.5px;">Parecer Técnico de Indeferimento</span>
+              <span style="font-size: 0.65rem; font-weight: 700; background-color: rgba(239, 68, 68, 0.15); color: #991b1b; padding: 2px 8px; border-radius: var(--radius-sm); border: 1px solid rgba(239, 68, 68, 0.1);">SEDSODH</span>
+            </div>
+            <p style="font-size: 0.875rem; line-height: 1.6; color: #7f1d1d; font-weight: 500; margin: 0; background: #ffffff; padding: 0.85rem 1.1rem; border-radius: var(--radius-sm); border-left: 4px solid var(--danger); box-shadow: inset 0 1px 2px rgba(0,0,0,0.02); font-style: italic;">
+              "${p.parecerTecnico}"
+            </p>
+          </div>
+        </div>
+      </div>
+      `;
+    }
+
+    const bodyContent = document.getElementById('drawer-body-content');
+    bodyContent.innerHTML = `
+      <!-- Situação do Requerimento -->
+      <div class="drawer-section">
+        <div class="drawer-section-title">Situação do Requerimento</div>
+        <div style="display: flex; gap: 0.75rem; align-items: center;">
+          <span class="status-tag ${p.statusAtual.toLowerCase()}" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">
+            ${p.statusAtual}
+          </span>
+          <span class="esteira-tag ${p.tipoEsteira.toLowerCase()}" style="font-size: 0.8rem; padding: 0.35rem 0.7rem;">
+            Esteira ${p.tipoEsteira}
+          </span>
+        </div>
+      </div>
+
+      <!-- Perfil da Beneficiária -->
+      <div class="drawer-section">
+        <div class="drawer-section-title">Perfil da Beneficiária</div>
+        <div class="drawer-grid">
+          <div class="drawer-item full-width">
+            <span class="drawer-label">Nome Completo (Protegido)</span>
+            <div class="confidential-wrapper">
+              <span class="confidential-data blurred" id="drawer-nome-sigilo" style="font-size: 1.05rem; font-weight: 600;">${p.beneficiaria.nome}</span>
+              <button class="btn-toggle-sigilo" onclick="toggleSigilo(this)" style="font-size: 0.75rem; padding: 2px 6px;">
+                Exibir
+              </button>
+            </div>
+          </div>
+          
+          <div class="drawer-item">
+            <span class="drawer-label">CPF (Protegido)</span>
+            <div class="confidential-wrapper">
+              <span class="confidential-data blurred" id="drawer-cpf-sigilo" style="font-family: monospace;">${p.beneficiaria.cpf}</span>
+              <button class="btn-toggle-sigilo" onclick="toggleSigilo(this)" style="font-size: 0.75rem; padding: 2px 4px;">
+                Exibir
+              </button>
+            </div>
+          </div>
+
+          <div class="drawer-item">
+            <span class="drawer-label">NIS CadÚnico</span>
+            <span class="drawer-value">${p.beneficiaria.nisCadunico}</span>
+          </div>
+
+          <div class="drawer-item">
+            <span class="drawer-label">Idade Calculada</span>
+            <span class="drawer-value">${calcularIdade(p.beneficiaria.dataNascimento)}</span>
+          </div>
+
+          <div class="drawer-item">
+            <span class="drawer-label">Telefone Contato</span>
+            <span class="drawer-value">${p.beneficiaria.telefone}</span>
+          </div>
+
+          <div class="drawer-item">
+            <span class="drawer-label">Bairro</span>
+            <span class="drawer-value">${p.beneficiaria.bairro}</span>
+          </div>
+
+          <div class="drawer-item">
+            <span class="drawer-label">Cidade / UF</span>
+            <span class="drawer-value">${p.beneficiaria.cidade}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Conta para Depósito -->
+      <div class="drawer-section">
+        <div class="drawer-section-title">Conta para Depósito (Folha)</div>
+        <div class="bank-card-mockup">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div class="bank-card-chip"></div>
+            <div class="bank-card-brand">Aluguel Social</div>
+          </div>
+          <div class="bank-card-number">
+            AG: ${dadosBancos.agencia} | CC: ${dadosBancos.conta}
+          </div>
+          <div class="bank-card-row">
+            <div>
+              <div class="bank-card-label">Favorecida</div>
+              <div class="bank-card-holder">${p.beneficiaria.nome}</div>
+            </div>
+            <div style="text-align: right;">
+              <div class="bank-card-label">Banco</div>
+              <div class="bank-card-holder" style="font-size:0.75rem; letter-spacing:0.5px;">BCO: ${dadosBancos.banco}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Triagem de Documentos -->
+      <div class="drawer-section">
+        <div class="drawer-section-title">Checklist de Documentação</div>
+        <div class="checklist-container">
+          ${p.documentos.map(doc => {
+            const verificado = doc.verificadoManualmente;
+            const text = verificado ? 'Verificado & Válido' : 'Pendente / Ausente';
+            const badgeClass = verificado ? 'completo' : 'pendente';
+            return `
+              <div class="checklist-item" style="padding: 0.75rem 1rem;">
+                <div class="checklist-info">
+                  <span class="checklist-title" style="font-size: 0.85rem;">${doc.tipoDocumento}</span>
+                </div>
+                <div class="checklist-actions">
+                  <span class="checklist-status-badge ${badgeClass}" style="font-size:0.65rem;">
+                    ${text}
+                  </span>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
+      ${parecerCardHtml}
+
+      <!-- Histórico de Tramitação -->
+      <div class="drawer-section">
+        <div class="drawer-section-title">Responsabilidade e Prazos</div>
+        <div class="drawer-grid">
+          <div class="drawer-item">
+            <span class="drawer-label">Data de Abertura</span>
+            <span class="drawer-value">${new Date(p.dataCriacao).toLocaleDateString('pt-BR')}</span>
+          </div>
+          <div class="drawer-item">
+            <span class="drawer-label">SLA Limite Decisão</span>
+            <span class="drawer-value" style="font-weight: 600; color: var(--danger);">${new Date(p.dataLimiteAnalise).toLocaleDateString('pt-BR')}</span>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const footer = document.getElementById('drawer-actions-footer');
+    footer.innerHTML = '';
+
+    if (p.statusAtual === 'ANALISE' || p.statusAtual === 'RECURSO') {
+      footer.innerHTML = `
+        <button onclick="closeDrawer()" class="px-4 py-2 bg-white border border-slate-200 text-slate-700 text-sm font-bold rounded-xl hover:bg-slate-50 transition-colors shadow-sm">Fechar</button>
+        <button class="px-4 py-2 bg-white border border-red-200 text-red-600 text-sm font-bold rounded-xl hover:bg-red-50 transition-colors shadow-sm" onclick="julgamentoProcesso('${p.id}', 'INDEFERIDO')">
+          Indeferir Requerimento
+        </button>
+        <button class="btn-action-primary" onclick="julgamentoProcesso('${p.id}', 'APROVADO')">
+          Deferir Benefício
+        </button>
+      `;
+    } else {
+      footer.innerHTML = `
+        <span style="font-size: 0.85rem; color: var(--text-muted); font-weight:600; margin-right:auto;">
+          Requerimento arquivado e finalizado.
+        </span>
+        <button onclick="closeDrawer()" class="px-4 py-2 bg-white border border-slate-200 text-slate-700 text-sm font-bold rounded-xl hover:bg-slate-50 transition-colors shadow-sm">Fechar</button>
+      `;
+    }
+
+    const overlay = document.getElementById('drawer-overlay');
+    const drawer = document.getElementById('detalhes-drawer');
+    overlay.style.display = 'block';
+    setTimeout(() => {
+      overlay.classList.add('open');
+      drawer.classList.add('open');
+    }, 10);
+  }
+
+  function closeDrawer() {
+    const overlay = document.getElementById('drawer-overlay');
+    const drawer = document.getElementById('detalhes-drawer');
+    
+    overlay.classList.remove('open');
+    drawer.classList.remove('open');
+    
+    setTimeout(() => {
+      overlay.style.display = 'none';
+    }, 300);
+  }
+
+  function abrirIndeferirModal(id, sei) {
+    document.getElementById('indeferir-processo-id').value = id;
+    document.getElementById('indeferir-sei-num').textContent = sei;
+    document.getElementById('indeferir-motivo-texto').value = '';
+    
+    const modal = document.getElementById('indeferir-modal');
+    modal.style.display = 'flex';
+    setTimeout(() => {
+      modal.classList.add('open');
+    }, 10);
+  }
+
+  function fecharIndeferirModal() {
+    const modal = document.getElementById('indeferir-modal');
+    if (!modal) return;
+    modal.classList.remove('open');
+    setTimeout(() => {
+      modal.style.display = 'none';
+      document.getElementById('form-indeferir-processo').reset();
+    }, 300);
+  }
+
+  async function salvarIndeferimento(e) {
+    e.preventDefault();
+    const id = document.getElementById('indeferir-processo-id').value;
+    const parecerTecnico = document.getElementById('indeferir-motivo-texto').value;
+
+    try {
+      const response = await fetch(`/api/processos/${id}/status`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ status: 'INDEFERIDO', parecerTecnico })
+      });
+      
+      const res = await response.json();
+      if (res.success) {
+        fecharIndeferirModal();
+        closeDrawer();
+        window.location.reload();
+      } else {
+        mostrarAlerta('danger', res.error);
+        fecharIndeferirModal();
+      }
+    } catch (error) {
+      mostrarAlerta('danger', 'Erro ao indeferir processo.');
+      fecharIndeferirModal();
+    }
+  }
+
+  async function julgamentoProcesso(id, status) {
+    const p = processos.find(proc => proc.id === id);
+    if (!p) return;
+
+    if (status === 'INDEFERIDO') {
+      abrirIndeferirModal(p.id, p.numeroProcessoSei);
+    } else {
+      const confirmacao = confirm(`Deseja realmente aprovar/deferir este requerimento?`);
+      if (!confirmacao) return;
+
+      try {
+        const response = await fetch(`/api/processos/${id}/status`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({ status })
+        });
+        
+        const res = await response.json();
+        if (res.success) {
+          closeDrawer();
+          window.location.reload();
+        } else {
+          mostrarAlerta('danger', res.error);
+        }
+      } catch (error) {
+        mostrarAlerta('danger', 'Erro ao deferir processo.');
+      }
+    }
+  }
+
+  function mostrarAlerta(tipo, msg) {
+    const container = document.getElementById('analista-alert-container');
+    container.innerHTML = `
+      <div class="alert alert-${tipo}">
+        <strong>${tipo === 'success' ? 'Sucesso' : 'Erro'}:</strong> ${msg}
+      </div>
+    `;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(() => { container.innerHTML = ''; }, 5000);
+  }
+
+  // Explicit window bindings
+  window.openDrawer = openDrawer;
+  window.closeDrawer = closeDrawer;
+  window.julgamentoProcesso = julgamentoProcesso;
+  window.abrirIndeferirModal = abrirIndeferirModal;
+  window.fecharIndeferirModal = fecharIndeferirModal;
+  window.salvarIndeferimento = salvarIndeferimento;
+  window.prevPage = prevPage;
+  window.nextPage = nextPage;
+  window.changeLimit = changeLimit;
+  window.switchTab = switchTab;
+  window.filterTable = filterTable;
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const tables = ['table-ativos', 'table-tramitados'];
+    tables.forEach(tableId => {
+      const rows = document.querySelectorAll(`#${tableId} .processo-row`);
+      rows.forEach(row => {
+        row.setAttribute('data-filtered-out', 'false');
+      });
+      aplicarPaginacao(tableId);
+    });
+
+    const rows = document.querySelectorAll('.processo-row');
+    rows.forEach(row => {
+      row.style.cursor = 'pointer';
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.action-btn-group') || e.target.closest('.btn-toggle-sigilo')) return;
+        const id = row.getAttribute('data-id');
+        if (id) {
+          openDrawer(id);
+        }
+      });
+    });
+  });
+</script>
+
+<%- include('../partials/footer') %>

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Erro - Sistema Auxílio Aluguel</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body style="background-color: var(--bg-app);">
+  
+  <div class="error-container">
+    <div class="error-icon">⚠️</div>
+    <h1 class="error-title"><%= message %></h1>
+    <p class="error-desc"><%= description %></p>
+    
+    <div style="display: flex; gap: 1rem;">
+      <% if (session && session.userId) { %>
+        <a href="/dashboard" class="btn-primary" style="text-decoration: none;">Voltar para o Painel</a>
+      <% } else { %>
+        <a href="/login" class="btn-primary" style="text-decoration: none;">Ir para o Login</a>
+      <% } %>
+    </div>
+  </div>
+
+</body>
+</html>
